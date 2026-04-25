@@ -1,0 +1,5 @@
+! DU_7_Monitors_391_MTQ_RMTQ1302
+New "Energymeter.Medidor_SEGMMT_SMT_254397644_B" element="Line.SMT_254397644_B" terminal=1
+New "monitor.SEGMMT_SMT_254397644_B" element="Line.SMT_254397644_B" terminal=1 mode=1 ppolar=no
+New "Energymeter.Medidor_SEGMMT_SMT_254397645_B" element="Line.SMT_254397645_B" terminal=1
+New "monitor.SEGMMT_SMT_254397645_B" element="Line.SMT_254397645_B" terminal=1 mode=1 ppolar=no

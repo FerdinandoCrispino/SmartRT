@@ -1,0 +1,5 @@
+! DU_7_Circuito_391_MTQ_RMTQ1302
+New "circuit.RMTQ1302" basekv=13.8 bus1="busA" r1=0 x1=0.0001 
+New "Transformer.REG_busA" phases=3 windings=2 buses=["busA" "MT194226033ID"] conns=[Wye Wye] kvs=[13.8 13.8] kvas=[33000.0 33000.0] %loadloss=0.0001 %noloadloss=0.0001 
+New "Regcontrol.CREG_busA" transformer="REG_busA" winding=2 vreg=102 band=2 ptratio=79.67
+

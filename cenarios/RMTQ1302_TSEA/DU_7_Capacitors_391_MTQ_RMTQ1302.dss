@@ -1,0 +1,5 @@
+! DU_7_Capacitors_391_MTQ_RMTQ1302
+New "Capacitor.CAP_295BC005147339" bus1="MT4365972545301392MT02.1.2.3" kvar=600.0 kv=13.8 phases=3 conn=Delta
+New "CapControl.C1ctrl_295BC005147339" element="Line.SMT_31349397_F" Capacitor=CAP_295BC005147339 Type=voltage ptratio=60 ON=218.5 OFF=230.0
+New "Capacitor.CAP_295BC005147349" bus1="MT439259364534294MT02.1.2.3" kvar=1200.0 kv=13.8 phases=3 conn=Delta
+New "CapControl.C1ctrl_295BC005147349" element="Line.SMT_228418812_B" Capacitor=CAP_295BC005147349 Type=voltage ptratio=60 ON=218.5 OFF=230.0

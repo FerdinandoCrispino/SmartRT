@@ -1,0 +1,3 @@
+! Add_Geradores_MT_7_MTQ_RMTQ1302
+New "PVsystem.MT_PV0" phases=3 bus1="MT4280393345193285MT02.1.2.3" conn=Delta kv=13.8 pf=1.0 pmpp=2875.0 kva=2500.0 %pmpp=100 irradiance=0.59 temperature=25 %cutin=0.1 %cutout=0.1 effcurve=Myeff P-TCurve=MyPvsT Daily=PVIrrad_RMTQ1302 TDaily=MyTemp
+New "PVsystem.MT_PV1" phases=3 bus1="MT427547245525705MT02.1.2.3" conn=Delta kv=13.8 pf=1.0 pmpp=2875.0 kva=2500.0 %pmpp=100 irradiance=0.59 temperature=25 %cutin=0.1 %cutout=0.1 effcurve=Myeff P-TCurve=MyPvsT Daily=PVIrrad_RMTQ1302 TDaily=MyTemp

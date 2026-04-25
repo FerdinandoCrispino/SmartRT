@@ -1,0 +1,55 @@
+! DU_7_Master_391_MTQ_RMTQ1302
+clear
+
+redirect DU_7_CurvaCarga_391_MTQ_RMTQ1302_17280.dss
+redirect DU_7_Circuito_391_MTQ_RMTQ1302.dss
+redirect DU_7_CodCondutores_391_MTQ_RMTQ1302.dss
+redirect DU_7_ChavesMT_391_MTQ_RMTQ1302.dss
+redirect DU_7_ReatoresMT_391_MTQ_RMTQ1302.dss
+redirect DU_7_TrafosMT_391_MTQ_RMTQ1302.dss
+redirect DU_7_TrechoMT_391_MTQ_RMTQ1302.dss
+redirect DU_7_CargasMT_391_MTQ_RMTQ1302.dss
+redirect DU_7_Monitors_391_MTQ_RMTQ1302.dss
+redirect DU_7_Capacitors_391_MTQ_RMTQ1302.dss
+redirect DU_7_CargasBT_391_MTQ_RMTQ1302.dss
+redirect DU_7_GeradoresMT_391_MTQ_RMTQ1302.dss
+redirect DU_7_GeradoresBT_391_MTQ_RMTQ1302_SemLoadshape.dss
+redirect DU_7_TrechoBT_391_MTQ_RMTQ1302.dss
+redirect DU_7_RamalBT_391_MTQ_RMTQ1302.dss
+redirect DU_7_ChavesBT_391_MTQ_RMTQ1302.dss
+redirect AddGenerator_BT_7_MTQ_RMTQ1302.dss
+redirect AddGenerator_MT_7_MTQ_RMTQ1302.dss
+
+New Monitor.smt_254397644_b_volt_curr element=Line.smt_254397644_b terminal=1 mode=0 ppolar=no
+New Monitor.smt_254397644_b_powers element=Line.smt_254397644_b terminal=1 mode=1 ppolar=no
+New Monitor.SMT_365594259_B_volt_curr element=Line.SMT_365594259_B terminal=1 mode=0 ppolar=no
+New Monitor.SMT_365594259_B_powers element=Line.SMT_365594259_B terminal=1 mode=1 ppolar=no
+New Monitor.SMT_365445911_B_volt_curr element=Line.SMT_365445911_B terminal=1 mode=0 ppolar=no
+New Monitor.SMT_365445911_B_powers element=Line.SMT_365445911_B terminal=1 mode=1 ppolar=no
+New Monitor.REG_295RT000020129A_taps element=Transformer.REG_295RT000020129A terminal=2 mode=2 
+New Monitor.REG_295RT000020129B_taps element=Transformer.REG_295RT000020129B terminal=2 mode=2 
+New Monitor.REG_295RT000020129C_taps element=Transformer.REG_295RT000020129C terminal=2 mode=2 
+
+edit Regcontrol.CREG_295RT000020129A tapwinding=2 vreg=123 revvreg=123 band=3.69 ptratio=63.496 delay=90 tapdelay=5 revthreshold=16 eventlog=yes
+edit Regcontrol.CREG_295RT000020129B tapwinding=2 vreg=123 revvreg=123 band=3.69 ptratio=63.496 delay=90 tapdelay=5 revthreshold=16 eventlog=yes
+edit Regcontrol.CREG_295RT000020129C tapwinding=2 vreg=123 revvreg=123 band=3.69 ptratio=63.496 delay=90 tapdelay=5 revthreshold=16 eventlog=yes
+
+edit Capacitor.CAP_295BC005147349 kvar=600
+edit CapControl.C1ctrl_295BC005147349 enable=False
+edit Capacitor.CAP_295BC005147339 enable=False
+edit CapControl.C1ctrl_295BC005147339 enable=False
+
+set voltagebases=(13.8,7.96,0.12,0.22,0.24,0.127)
+calcv
+
+set normvminpu=0.93
+set mode=daily
+set controlmode=time
+set tolerance=0.0001
+set maxcontroliter=100
+set maxiterations=100
+set stepsize=5s 
+set number=17280 
+solve
+
+buscoords buscoords.csv
