@@ -26,8 +26,13 @@ class Pesos:
     tap: int
     reg_voltage: float
     vreg: float
+    ptratio: float
+    v_base: float
+    v_reg_pu = float
     patamar: int = 0
 
+    def __post_init__(self):
+        self.v_reg_pu = (self.vreg * self.ptratio) / self.v_base
 
 class SmartRT:
     def __init__(self, circuit, dss_file, bus_medicao, regcontrolname, num_patamatares=17280, patamar_ini=1, patamar_fim=17280):
@@ -119,11 +124,16 @@ class SmartRT:
             tap_reg = self.dss.regcontrols.tap_number
             rreg = self.dss.regcontrols.reverse_vreg
             fvreg = self.dss.regcontrols.forward_vreg
+            pt_ratio_reg = self.dss.regcontrols.pt_ratio
             self.dss.transformers.name = self.dss.regcontrols.transformer
             bus_reg_trafo = self.dss.cktelement.bus_names[1].split('.')[0]
             node_reg_trafo = self.dss.cktelement.bus_names[1].split('.')[1]
+            self.dss.circuit.set_active_bus(bus_reg_trafo)
+            v_base = self.dss.bus.kv_base * 1000
+
             volt_bus_reg = df_patamar_voltage.loc[
-                (df_patamar_voltage['bus'] == bus_reg_trafo) & (df_patamar_voltage['nodes'] == node_reg_trafo)]
+                (df_patamar_voltage['bus'] == bus_reg_trafo) & (df_patamar_voltage['nodes'] == node_reg_trafo) &
+            (df_patamar_voltage['patamar'] == patamar)]
 
             # garantir a ordem das barras igual a lista de entrada das barras de medicao
             list_bus_medicao = [word for item in self.bus_medicao for word in item.split('.')]
@@ -132,7 +142,7 @@ class SmartRT:
             df_bus_medicao = df_bus_medicao.sort_values('bus_sort').drop(columns='bus_sort')
 
             pesos = Pesos(voltage_list=df_bus_medicao['vln_pu'].tolist(), tap=tap_reg, patamar=patamar,
-                  reg_voltage=volt_bus_reg['vln_pu'].values[0], vreg=fvreg)
+                  reg_voltage=volt_bus_reg['vln_pu'].values[0], vreg=fvreg, ptratio=pt_ratio_reg, v_base=v_base)
             print('Determinacao dos pesos ok. ')
             return pesos
         else:
@@ -228,10 +238,15 @@ class SmartRT:
 
             # obtem a previsao do setup dinamico para o proximo patamar
             if number % 48 == 0: # patamar multiplo de 4 min - 240 segundos
-                setpoint = pesos.vreg
-                setup_dinamico_TSEA_prever(tensao_saida=pesos.reg_voltage, entradas=pesos.voltage_list,
+                setpoint = pesos.v_reg_pu
+                result_set_point = setup_dinamico_TSEA_prever(tensao_saida=pesos.reg_voltage, entradas=pesos.voltage_list,
                                            setpoint_atual=setpoint )
-                print (f'Setpoint: {setpoint}')
+
+                new_vreg = result_set_point * pesos.v_base / pesos.ptratio
+                self.dss.regcontrols.name = self.regControlName
+                self.dss.regcontrols.forward_vreg = new_vreg
+                print(f'Setpoint: {result_set_point} -- {new_vreg}')
+
 
         # proc_time_ini = time.time()
         self.all_bus_kv = pd.DataFrame(voltage_bus_list_all)
@@ -253,11 +268,17 @@ if __name__ == '__main__':
 
                          # 'bt4295442945257362mt02.1'] #    , 'mt4279615845183301mt02.1']
 
-
     regcontrol = 'creg_295rt000020129c' # Atencao: node 1!
+
+    #dss_file = r'C:\pastaD\TSEA\SmartRT\cenarios\RBOI302_TSEA\DU_7_Master_391_BOI_RBOI1302_17280.dss'
+    #circuito = 'RBOI1302'
+    #pontos_de_medicao = ['mt4409888436905484bo02', 'mt4419742636825865bo02', 'mt4429122636883188bo02',
+    #                     'mt4433062136860652bo02', 'bt443247023686327bo02']
+    #regcontrol = ''  # Atencao: node 1!
+
     num_patamatares = 17280             # numero total de patamares da simulação
-    patamar_ini = 2520                  # numero de patamares - converter a hora de inicio da simulação em patamares
-    patamar_fim = 5000                  # converter a hora de fim da simulação em patamares
+    patamar_ini = 0                 # 2520   # numero de patamares - converter a hora de inicio da simulação em patamares
+    patamar_fim = 17280             # 5000   # converter a hora de fim da simulação em patamares
 
 
     simul = SmartRT(circuit=circuito,
