@@ -125,11 +125,15 @@ class SmartRT:
 
     def _set_pesos(self, bus_voltage, patamar):
 
-        df_patamar_voltage = pd.DataFrame(bus_voltage)
+
+        filtered_data = [item for item in bus_voltage if item['patamar'] == patamar]
+
+        df_patamar_voltage = pd.DataFrame(filtered_data)
+
+        # tensões nos barramentos selecionados
         df_bus_medicao = df_patamar_voltage[
             df_patamar_voltage['bus'].isin([medicao.split('.')[0] for medicao in self.bus_medicao]) &
-            df_patamar_voltage['nodes'].isin([medicao.split('.')[1] for medicao in self.bus_medicao]) &
-            (df_patamar_voltage['patamar'] == patamar) ].copy()
+            df_patamar_voltage['nodes'].isin([medicao.split('.')[1] for medicao in self.bus_medicao]) ].copy()
 
         if df_bus_medicao.shape[0] < len(self.bus_medicao):
             print(f"Barra não encontrada! Verificar a lista de barras fornecida.")
@@ -137,16 +141,18 @@ class SmartRT:
 
         self.dss.regcontrols.name = self.regControlName
         if self.dss.regcontrols.name == self.regControlName:
-            tap_reg = self.dss.regcontrols.tap_number
-            rreg = self.dss.regcontrols.reverse_vreg
-            fvreg = self.dss.regcontrols.forward_vreg
-            pt_ratio_reg = self.dss.regcontrols.pt_ratio
+            tap_reg = self.dss.regcontrols.tap_number                       # posição do tap do regulador
+            winding = self.dss.regcontrols.winding                          # bobina de referencia para o controle de tensão
+            rreg = self.dss.regcontrols.reverse_vreg                        # tensão de refencia do secundario para condição reversa
+            fvreg = self.dss.regcontrols.forward_vreg                       # tensão de refencia do secundario para condição normal
+            pt_ratio_reg = self.dss.regcontrols.pt_ratio                    # relação do transformador de potencial
             self.dss.transformers.name = self.dss.regcontrols.transformer
             bus_reg_trafo = self.dss.cktelement.bus_names[1].split('.')[0]
             node_reg_trafo = self.dss.cktelement.bus_names[1].split('.')[1]
             self.dss.circuit.set_active_bus(bus_reg_trafo)
             v_base = self.dss.bus.kv_base * 1000
 
+            # tensão no regulador selecionado
             volt_bus_reg = df_patamar_voltage.loc[
                 (df_patamar_voltage['bus'] == bus_reg_trafo) & (df_patamar_voltage['nodes'] == node_reg_trafo) &
             (df_patamar_voltage['patamar'] == patamar)]
@@ -297,9 +303,9 @@ if __name__ == '__main__':
 
     #dss_file = r'C:\pastaD\TSEA\SmartRT\cenarios\RBOI302_TSEA\DU_7_Master_391_BOI_RBOI1302_17280.dss'
     #circuito = 'RBOI1302'
-    #pontos_de_medicao = ['mt4409888436905484bo02', 'mt4419742636825865bo02', 'mt4429122636883188bo02',
-    #                     'mt4433062136860652bo02', 'bt443247023686327bo02']
-    #regcontrol = ''  # Atencao: node 1!
+    #pontos_de_medicao = ['mt4409888436905484bo02.1', 'mt4419742636825865bo02.1', 'mt4429122636883188bo02.1',
+    #                     'mt4433062136860652bo02.1', 'bt443247023686327bo02.1']
+    #regcontrol = 'creg_185rt005019989a'  # Atencao: node 1!
 
     num_patamatares = 17280             # numero total de patamares da simulação
     patamar_ini = 0                 # 2520   # numero de patamares - converter a hora de inicio da simulação em patamares
