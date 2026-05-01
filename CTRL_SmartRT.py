@@ -1,4 +1,3 @@
-import time
 
 from setup_dinamico import (
     setup_dinamico_TSEA_iniciar,
@@ -7,6 +6,7 @@ from setup_dinamico import (
     setup_dinamico_TSEA_prever
 )
 
+import time
 from py_dss_interface import DSS
 import os
 import pandas as pd
