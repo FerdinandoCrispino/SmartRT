@@ -1,3 +1,4 @@
+import time
 
 from setup_dinamico import (
     setup_dinamico_TSEA_iniciar,
@@ -9,8 +10,9 @@ from setup_dinamico import (
 from py_dss_interface import DSS
 import os
 import pandas as pd
+import numpy as np
 import cmath
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, fields
 
 def convert2polar(real, imag):
     z = complex(real, imag)
@@ -44,8 +46,22 @@ class SmartRT:
         self.bus_medicao = [item.lower() for item in bus_medicao]
         self.num_bus_medicao = len(bus_medicao)
         self.regControlName = regcontrolname
+        self.pesos_list = []
         self.dss = self._read_dss_file()
 
+
+    def _save_results(self):
+
+        path_result_pesos = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resultados", self.circuit, "pesos.csv")
+        path_result_bus = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resultados", self.circuit, "voltage_bus.csv")
+
+        # save pesos results
+        data = [asdict(pesos) for pesos in self.pesos_list]
+        df = pd.DataFrame(data)
+        df.to_csv(path_result_pesos, index=False)
+
+        # save voltage_bus_results
+        self.all_bus_kv.to_csv(path_result_bus, index=False)
 
     def _read_dss_file(self) -> DSS:
         """
@@ -156,6 +172,7 @@ class SmartRT:
         voltage_bus_list_all = []
         voltage_bus_list = []
 
+
         for number in range(1, total_number + 1):
             self.dss.solution.solve()
             hour =  self.dss.solution.hour
@@ -206,20 +223,23 @@ class SmartRT:
 
                     vll_1 = round(convert2polar(self.dss.bus.vll[pos * 2],
                                                 self.dss.bus.vll[(pos * 2) + 1])[0], 5)
+                    vll_1 = np.float32(vll_1)
                     vll_pu_1 = round(
                         convert2polar(self.dss.bus.pu_vll[pos * 2], self.dss.bus.pu_vll[(pos * 2) + 1])[0], 5)
+                    vll_pu_1 = np.float32(vll_pu_1)
 
                 # tensoes de fase
                 # print(self.dss.bus.kv_base)
                 # print(self.dss.bus.vmag_angle)
                 vln_1 = round(convert2polar(self.dss.bus.voltages[pos * 2],
                                             self.dss.bus.voltages[(pos * 2) + 1])[0], 5)
+                vln_1 = np.float32(vln_1)
                 vln_pu_1 = round(convert2polar(self.dss.bus.pu_voltages[pos * 2],
                                                self.dss.bus.pu_voltages[(pos * 2) + 1])[0], 5)
-
+                vln_pu_1 = np.float32(vln_pu_1)
 
                 vll_list.append([f"{bus_name.split('.')[0]}", bus_node, vll_1, vll_pu_1, vln_1, vln_pu_1,
-                                 self.dss.bus.kv_base])
+                                 int(self.dss.bus.kv_base * 1000) ])
 
             for bus, nodes, vll, vll_pu, vln, vln_pu, kv_base in vll_list:
                 voltage_bus_list_all.append({"patamar": number, "bus": bus, "nodes": nodes, "vll": vll, "vln": vln,
@@ -229,27 +249,32 @@ class SmartRT:
             # Atualizacao dos pesos
             if (number-1) % 3 == 0:  # patamar multiplo de 15 segundos
                 # obtem os pesos para o setup dinamico
-                pesos = self._set_pesos(voltage_bus_list_all, number)
-                print(pesos)
+                set_pesos = self._set_pesos(voltage_bus_list_all, number)
+                self.pesos_list.append(set_pesos)
+                print(set_pesos)
                 # atualizar pesos
                 #voltage_list = [str(x) for x in pesos.voltage_list]
-                setup_dinamico_TSEA_atualizar_pesos(tensao_saida=pesos.reg_voltage, tenssoes_pontos=pesos.voltage_list,
-                                                    tap_atual=pesos.tap)
+                setup_dinamico_TSEA_atualizar_pesos(tensao_saida=set_pesos.reg_voltage, tenssoes_pontos=set_pesos.voltage_list,
+                                                    tap_atual=set_pesos.tap)
 
             # obtem a previsao do setup dinamico para o proximo patamar
             if number % 48 == 0: # patamar multiplo de 4 min - 240 segundos
-                setpoint = pesos.v_reg_pu
-                result_set_point = setup_dinamico_TSEA_prever(tensao_saida=pesos.reg_voltage, entradas=pesos.voltage_list,
+                setpoint = set_pesos.v_reg_pu
+                result_set_point = setup_dinamico_TSEA_prever(tensao_saida=set_pesos.reg_voltage, entradas=set_pesos.voltage_list,
                                            setpoint_atual=setpoint )
 
-                new_vreg = result_set_point * pesos.v_base / pesos.ptratio
+                new_vreg = result_set_point * set_pesos.v_base / set_pesos.ptratio
                 self.dss.regcontrols.name = self.regControlName
                 self.dss.regcontrols.forward_vreg = new_vreg
                 print(f'Setpoint: {result_set_point} -- {new_vreg}')
 
 
-        # proc_time_ini = time.time()
+        # Save bus voltage results
         self.all_bus_kv = pd.DataFrame(voltage_bus_list_all)
+
+        # Save result
+        self._save_results()
+
         #self.all_bus_kv['tr_vln'] = pd.to_numeric(self.all_bus_kv['tr_vln'], errors='coerce')
         #self.all_bus_kv = self.all_bus_kv.sort_values(['patamar', 'tr_vln', 'kv_base'])
 
@@ -280,6 +305,7 @@ if __name__ == '__main__':
     patamar_ini = 0                 # 2520   # numero de patamares - converter a hora de inicio da simulação em patamares
     patamar_fim = 17280             # 5000   # converter a hora de fim da simulação em patamares
 
+    proc_time_ini = time.time()
 
     simul = SmartRT(circuit=circuito,
                     dss_file=dss_file,
@@ -293,3 +319,4 @@ if __name__ == '__main__':
 
     simul.solve_circuit()
 
+    print(f"Processo concluído em {time.time() - proc_time_ini}")
