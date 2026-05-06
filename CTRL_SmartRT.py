@@ -11,7 +11,9 @@ import pandas as pd
 import numpy as np
 import cmath
 from dataclasses import dataclass, asdict
-
+import logging
+logging.basicConfig(filename='CTRL_SmartRT.log', level=logging.INFO,
+                    format='%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d,%H:%M:%S')
 
 def convert2polar(real, imag):
     z = complex(real, imag)
@@ -59,11 +61,16 @@ class SmartRT:
         self.path_result_bus = os.path.join(self.result_dir, "voltage_bus.csv")
         self.path_result_pesos = os.path.join(self.result_dir, "pesos.csv")
         self._bus_buffer = []
-        self._flush_interval = 1000  # flush to disk every 1000 patamares
+        self._flush_interval = 100  # flush to disk every 1000 patamares
         self._pesos_buffer = []
 
         # ensure DSS is ready
         self.dss = self._read_dss_file()
+
+        # Check kv_base
+        self.__check_kv_base()
+
+
 
     def _read_dss_file(self) -> DSS:
         """
@@ -98,6 +105,90 @@ class SmartRT:
 
         return dss
 
+    def __check_kv_base(self):
+        """
+        Verifica a tensão de base definida pelo openDSS para as todas as barras conectadas
+        no secundario dos transformadores.
+        São obtidas as tensões de fase para a barra do secundario do TR e comparada com a informada pelo openDSS
+        Em caso de diferença são localizadas todas barras conectadas no secundario do transformador e set o kv_base
+        de todas as barras com o valor obtido da avaliação das conecções do transformador.
+        :return:
+        """
+        # identifica a tensão de linha e de fase para cada transformador
+        dss = self.dss
+        tr_map = {}
+        dss.transformers.first()
+        vln = vll = None
+        for _ in range(dss.transformers.count):
+            dss.circuit.set_active_element(f"transformer.{dss.transformers.name}")
+            tr_ph = dss.cktelement.num_phases
+            if tr_ph == 3:
+                dss.transformers.wdg = 2
+                vll = dss.transformers.kv
+                vln = dss.transformers.kv / np.sqrt(3)
+            elif tr_ph == 1:
+                num_wdg = dss.transformers.num_windings
+                if num_wdg == 2:
+                    dss.transformers.wdg = 2
+                    if dss.transformers.is_delta:
+                        vll = dss.transformers.kv
+                        vln = vll / 2
+                    else:
+                        vln = dss.transformers.kv
+                        vll = vln * 2
+                elif num_wdg == 3:
+                    dss.transformers.wdg = 2
+                    vln = dss.transformers.kv
+                    vll = 2 * vln
+
+            tr_map[dss.transformers.name] = (round(vll, 3), round(vln, 3))
+
+            bus_name = dss.cktelement.bus_names
+            element_name = dss.cktelement.name
+            dss.circuit.set_active_bus(bus_name[1])
+            bus_name1 = dss.bus.name
+            kv_base = dss.bus.kv_base
+            # Verifica se ha diferença entre o calculado e o descrito pelo opnDSS
+            if round(vln, 3) != round(kv_base, 3):
+                print(f'{element_name}: {bus_name1}: {kv_base}: {vln}')
+                # todo testar para ver se setar a tensão de linha e a tensão de fase fazem diferença !!!!
+                # dss.text(f'SetkVBase Bus={bus_name1} kVLL={vll}')
+                dss.text(f'SetkVBase Bus={bus_name1} kVLN={vln}')
+                print(f'Valor alterado: {dss.cktelement.bus_names[1]} - kvbase:{dss.bus.kv_base}')
+
+                # Localozar o transformador que foi alterado o valor de kvbase atraves da topologia
+                dss.topology.first()
+                while True:
+                    indx = dss.topology.active_branch
+                    indx_level = dss.topology.active_level
+                    branch_name = dss.topology.branch_name
+                    if branch_name == element_name:
+                        dss.circuit.set_active_element(element_name)
+                        dss.circuit.set_active_bus(dss.cktelement.bus_names[1])
+                        # encontrou o transformador que foi alterado com setkvbase
+                        break
+                    index_branch = dss.topology.forward_branch()
+
+                # busca os ramais conectados neste transformador
+                while True:
+                    index_branch_2 = dss.topology.next()
+                    indx_level_2 = dss.topology.active_level
+                    branch_name_2 = dss.topology.branch_name
+                    if not dss.topology.branch_name.startswith(('Line.sbt', 'Line.rbt')):
+                        print('\n Proximo transformador !!! \n')
+                        break
+                    # sekvbase aqui
+                    dss.circuit.set_active_element(branch_name_2)
+                    dss.circuit.set_active_bus(dss.cktelement.bus_names[1])
+                    kv_base_2 = dss.bus.kv_base
+                    print(f'{branch_name_2}: {dss.cktelement.bus_names}: {kv_base_2}')
+                    dss.text(f'SetkVBase Bus={bus_name1} kVLL={vll}')
+                    dss.text(f'SetkVBase Bus={bus_name1} kVLN={vln}')
+                    print(f'Valor alterado: {dss.cktelement.bus_names[1]} - kvbase:{dss.bus.kv_base}')
+            dss.transformers.next()
+
+        self._transformer_kv_map = tr_map
+
     def configure(self):
         num_entradas = self.num_bus_medicao
         algoritmo_de_controle = setup_dinamico_TSEA_iniciar(num_entradas=num_entradas)
@@ -130,8 +221,8 @@ class SmartRT:
             print(f"Barra não encontrada! Verificar a lista de barras fornecida.")
             exit()
 
-        self.dss.regcontrols.name = self.regControlName
-        if self.dss.regcontrols.name == self.regControlName:
+        self.dss.regcontrols.name = self.regControlName[0]
+        if self.dss.regcontrols.name == self.regControlName[0]:
             tap_reg = self.dss.regcontrols.tap_number
             winding = self.dss.regcontrols.winding
             rreg = self.dss.regcontrols.reverse_vreg
@@ -163,6 +254,7 @@ class SmartRT:
             return pesos
         else:
             print(f'Regulador nao encontrado!')
+            return None
 
     def _flush_bus_buffer(self):
         # escreve buffer acumulado em disco e limpa o buffer
@@ -211,23 +303,47 @@ class SmartRT:
 
         set_pesos = None
         for number in range(1, total_number + 1):
-            self.dss.solution.solve()
+
             hour =  self.dss.solution.hour
             sec = self.dss.solution.seconds
             print(f"Patamar:{number}, hour: {hour}, seconds: {sec}")
+
+            self.dss.solution.solve()
             status = self.dss.solution.converged
             if status == 0:
                 print(f'OpenDSS: File {self.dss_file} not solved to time {number}!')
                 # tentar novamente com loadmult
-                self.dss.text(f"set number = {number}")
                 self.dss.text(f"set loadmult=1.01")
+                self.dss.text(f"set time = ({hour}, {sec})")
+                print(f"Patamar:{number}, hour: {hour}, seconds: {sec}")
                 self.dss.solution.solve()
+                self.dss.text(f"set loadmult=1.0")
                 status = self.dss.solution.converged
                 if status == 0:
                     print(f'OpenDSS: File {self.dss_file} alter loadMult 1.01 and not solved to time {number}!')
-                    continue
+
+                    # tentar novamete aumentando um pouco mais a carga.
+                    self.dss.text(f"set loadmult=1.02")
+                    self.dss.text(f"set time = ({hour}, {sec})")
+                    self.dss.solution.solve()
+                    self.dss.text(f"set loadmult=1.0")
+                    status = self.dss.solution.converged
+                    if status == 0:
+                        logging.info(
+                            f'OpenDSS: File {self.dss_file} NOT solved! - loadmult=1.02'
+                            f'Set number: {number}, hour: {hour}, seconds: {sec}, event: {self.dss.solution.event_log}')
+                        continue
+                    else:
+                        logging.info(f'OpenDSS: File {self.dss_file} SOLVED alter loadMult 1.02  '
+                            f'Set number: {number}, hour: {hour}, seconds: {sec}, event: {self.dss.solution.event_log}')
+                        print(f'OpenDSS: File {self.dss_file} alter loadMult 1.02 and solved to time {number}!')
                 else:
+                    logging.info(
+                        f'OpenDSS: File {self.dss_file} SOLVED alter loadMult 1.01! '
+                        f'Set number: {number}, hour: {hour}, seconds: {sec}, {self.dss.solution.event_log}')
+
                     print(f'OpenDSS: File {self.dss_file} alter loadMult 1.01 and solved to time {number}!')
+
 
             current_voltage_rows = []
             for bus_name in self.dss.circuit.nodes_names:
@@ -279,21 +395,27 @@ class SmartRT:
                 if len(self._pesos_buffer) >= self._flush_interval:
                     self._flush_pesos_buffer()
                 print(set_pesos)
+
+
                 # atualiza o setup dinamico a cada 3 patamares (comportamento original)
                 if (number-1) % 3 == 0:
                     setup_dinamico_TSEA_atualizar_pesos(tensao_saida=set_pesos.reg_voltage, tenssoes_pontos=set_pesos.voltage_list,
                                                         tap_atual=set_pesos.tap)
 
-            # obtem a previsao do setup dinamico para o proximo patamar
+            # previsao do setup dinamico para o proximo patamar
             if number % 48 == 0 and set_pesos is not None:
                 setpoint = set_pesos.v_reg_pu
                 result_set_point = setup_dinamico_TSEA_prever(tensao_saida=set_pesos.reg_voltage, entradas=set_pesos.voltage_list,
                                            setpoint_atual=setpoint )
 
+                # valor do vreg do regulador de tensão
                 new_vreg = result_set_point * set_pesos.v_base / set_pesos.ptratio
-                self.dss.regcontrols.name = self.regControlName
-                print(f'Setpoint: {result_set_point} New: {new_vreg} Old:{self.dss.regcontrols.forward_vreg}')
-                self.dss.regcontrols.forward_vreg = new_vreg
+
+                # set the same vreg for all regulatos
+                for reg_name in self.regControlName:
+                    self.dss.regcontrols.name = reg_name
+                    print(f'Regulador:{reg_name} setpoint:{result_set_point} New:{new_vreg} Old:{self.dss.regcontrols.forward_vreg}')
+                    self.dss.regcontrols.forward_vreg = new_vreg
 
         # flush any remaining buffered rows
         self._flush_bus_buffer()
@@ -306,19 +428,21 @@ class SmartRT:
 
 if __name__ == '__main__':
 
-    dss_file = r'D:\SmartRT\cenarios\RMTQ1302_TSEA\DU_7_Master_391_MTQ_RMTQ1302_17280_TSEA.dss'
+    dss_file = r'C:\pastaD\TSEA\SmartRT\cenarios\RMTQ1302_TSEA\DU_7_Master_391_MTQ_RMTQ1302_17280_TSEA.dss'
     circuito = 'RMTQ1302'
+    # Os pontos de medição devem ser da mesma fase.
     pontos_de_medicao = ['mt4339274745933283mt02.1', 'mt4291205645697419mt02.1', 'mt4294449845693038mt02.1',
                          'mt4283709245476469mt02.1', 'BT430501424549936MT02.1' ]
 
                          # 'bt4295442945257362mt02.1'] #    , 'mt4279615845183301mt02.1']
 
     regcontrol = 'creg_295rt000020129c' # Atencao: node 1!
-
+    # O primeiro regulador da lista deve ter a mesma fase das barras de medição selecionadas.
+    regcontrol = ['creg_295rt000020129c', 'creg_295rt000020129a', 'creg_295rt000020129b']
 
     num_patamatares = 17280             # numero total de patamares da simulação
-    patamar_ini = 2000                 # 2520   # numero de patamares - converter a hora de inicio da simulação em patamares
-    patamar_fim = 4000             # 5000   # converter a hora de fim da simulação em patamares
+    patamar_ini = 0                 # 2520   # numero de patamares - converter a hora de inicio da simulação em patamares
+    patamar_fim = 17280             # 5000   # converter a hora de fim da simulação em patamares
 
     proc_time_ini = time.time()
 
