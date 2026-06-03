@@ -25,6 +25,7 @@ class Analisys:
     data_circuit: str
     data_path: str
     pesos_data: str
+    setup_dinamico: str
     data_dir = str
     data_file = str
     pesos_data_path= str
@@ -173,14 +174,18 @@ class Analisys:
             fig, axes = plt.subplots(nrows=3, ncols=1, figsize=(10, 8))
 
             dados[f"tap_{fase}"].plot(ax=axes[0], ylim=(tap_min , tap_max), title=f"TAP Change {fase}", color='blue')
+            axes[0].grid(True, linestyle='--', alpha=0.6, color='gray')
             dados["vreg"].plot(ax=axes[1], ylim=(vreg_min , vreg_max), title="Vref", color='red')
+            axes[1].grid(True, linestyle='--', alpha=0.6, color='gray')
             dados[f"reg_voltage_{fase}"].plot(ax=axes[2],  ylim=(reg_volt_mim , reg_volt_max), title="Vreg", color='green')
+            axes[2].grid(True, linestyle='--', alpha=0.6, color='gray')
 
             plt.xlabel(f"Time steps")
             plt.tight_layout()  # Prevents label overlapping
-            plt.grid(axis='y')
+            #plt.grid(axis='y')
             plt_path = os.path.join(self.data_dir, f"tap_change_{fase}.png")
             plt.savefig(plt_path)
+            plt.close()
 
     def plot_results(self, dados):
         circuit = self.data_circuit
@@ -222,7 +227,7 @@ class Analisys:
             ax.xaxis.set_major_locator(ticker.MultipleLocator(espacamento))
             plt_path = os.path.join(plt_path_base, "bt_voltages.png")
             plt.savefig(plt_path, dpi=600, bbox_inches='tight', transparent=False)
-            plt.show(block=False)
+            plt.close()
 
             # grafico de porcentagem - undervoltage
             ax = bt_df_under.plot(kind='bar', ylim=(0 , escala_max), stacked=True)
@@ -233,7 +238,8 @@ class Analisys:
             ax.xaxis.set_major_locator(ticker.MultipleLocator(espacamento))
             plt_path = os.path.join(plt_path_base, "bt_voltages_under.png")
             plt.savefig(plt_path, dpi=600, bbox_inches='tight', transparent=False)
-            plt.show(block=False)
+            #plt.show(block=False)
+            plt.close()
 
             # grafico de porcentagem - overvoltage
             ax = bt_df_over.plot(kind='bar', ylim=(0 , escala_max), stacked=True)
@@ -244,12 +250,18 @@ class Analisys:
             ax.xaxis.set_major_locator(ticker.MultipleLocator(espacamento))
             plt_path = os.path.join(plt_path_base, "bt_voltages_over.png")
             plt.savefig(plt_path, dpi=600, bbox_inches='tight', transparent=False)
-            plt.show(block=False)
+            plt.close()
 
         else:
             print("Sem violação de tensão BT.")
 
-        if not mt_df.empty :
+        if not mt_df.empty:
+            if self.setup_dinamico == 'True':
+                escala_max = 25
+            else:
+                escala_max = int(mt_df_perc.max().sum() * 1.1)
+
+
             ax = mt_df.plot(kind='bar', stacked=True)
             plt.title(f"BUS Violation : {circuit}")
             plt.ylabel(f"Number")
@@ -257,17 +269,17 @@ class Analisys:
             ax.xaxis.set_major_locator(ticker.MultipleLocator(espacamento))
             plt_path = os.path.join(plt_path_base, "mt_voltages.png")
             plt.savefig(plt_path, dpi=600, bbox_inches='tight', transparent=False)
-            plt.show(block=False)
+            plt.close()
 
             # grafico de porcentagem
-            ax = mt_df_perc.plot(kind='bar', stacked=True)
+            ax = mt_df_perc.plot(kind='bar', ylim=(0 , escala_max), stacked=True)      # Todo avaliar para cada caso...
             plt.title(f"BUS Violation : {circuit}")
             plt.ylabel(f"Number (%)")
             plt.xlabel(f"Time")
             ax.xaxis.set_major_locator(ticker.MultipleLocator(espacamento))
             plt_path = os.path.join(plt_path_base, "mt_voltages_perc.png")
             plt.savefig(plt_path, dpi=600, bbox_inches='tight', transparent=False)
-            plt.show(block=False)
+            plt.close()
         else:
             print("Sem violação de tensão MT.")
 
@@ -415,9 +427,10 @@ class Analisys:
             figsize=(10, 5),
             mostrar_nos=False,
             setup_dinamico = "False",
+
     ):
 
-        for file in Path(path_file).glob(f'*{setup_dinamico}_Profile*.csv'):
+        for file in Path(path_file).glob(f'*{setup_dinamico}_EXP_Profile*.csv'):
             print(file.name)
             titulo = f"Perfil de Tensão - {self.data_circuit} - Hora: {file.name.split("_")[-1].split('.')[0]}h"
             df = pd.read_csv(file.absolute())
@@ -453,6 +466,7 @@ class Analisys:
 
             # Configurações do gráfico
             plt.title(titulo, fontsize=14)
+            plt.xlim(left=0)
             plt.xlabel("Distância (km)", fontsize=12)
             plt.ylabel("Tensâo (pu)", fontsize=12)
             plt.axhline(y=1.05, color='r', linestyle='--', label='mt_over_crit')
@@ -470,7 +484,8 @@ class Analisys:
             plt_path = os.path.join(self.data_dir, f"{file.stem}.png")
             plt.savefig(plt_path)
             #plt.savefig(plt_path, dpi=600, bbox_inches='tight', transparent=False)
-            plt.show()
+            #plt.show()
+            plt.close()
 
 
     def read_csv(filename):
@@ -502,12 +517,22 @@ import matplotlib.pyplot as plt
 if __name__ == "__main__":
     circuito = 'RMTQ1302'
     cenario = 'TSEA'
-    circuito = 'RAVP1303'
+
+    #circuito = 'RAVP1303'
+    #cenario = 'BASE'
+
+    #circuito = 'RBOI1302'
+    #cenario = 'BASE'
+
+    #circuito = 'RAVP1305'
+    #cenario = 'BASE'
+
+    circuito = 'RBRR1301'
     cenario = 'BASE'
-    com_setup_dinamico = 'True'
+    usa_setup_dinamico = 'False'
 
     application_path = os.path.dirname(os.path.abspath(__file__))
-    csv_file = os.path.join(application_path, fr'.\resultados\{circuito}\voltage_bus.csv')
+    csv_file = os.path.join(application_path, fr'resultados\{circuito}\voltage_bus.csv')
     # read_csv(r".\resultados\RMTQ1302\voltage_bus.csv")
 
     # Leitura dos dados de configuração das pontos de medição e dos reguladores
@@ -519,15 +544,15 @@ if __name__ == "__main__":
 
 
     # inicializa a classe de analise dos resultados
-    print(f"Inicialização da classe de análise gráfica para {circuito}... ")
-    results = Analisys(circuito, csv_file, "pesos.csv")
+    print(f"Inicialização da classe de análise gráfica para {circuito} - setup_dinamico: {usa_setup_dinamico}...")
+    results = Analisys(circuito, csv_file, "pesos.csv", usa_setup_dinamico)
     # Análise das condições das barras ao longo do dia
 
 
     # prefil de tensões
     print("Gráficos de pefil de tensão...")
     results.plot_perfil_tensao(os.path.join(application_path, fr'cenarios\{circuito}_{cenario}'),
-                               setup_dinamico=com_setup_dinamico)
+                               setup_dinamico=usa_setup_dinamico)
 
     # Tensões dos pontos de medição
     print("Gráficos de tensões nos pontos de medição...")
@@ -538,7 +563,7 @@ if __name__ == "__main__":
     results.plot_taps()
 
     # Análise das condições das barras ao longo do dia
-    print("Gráficos de análise de tensões de toddas as barras...")
+    print("Gráficos de análise de tensões de todas as barras...")
     dados, dados_drc_drp = results.polar_read_csv()
     results.plot_results(dados)
 

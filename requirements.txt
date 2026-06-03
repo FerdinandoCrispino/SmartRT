@@ -6,3 +6,6 @@ py_dss_interface>=0.4
 
 matplotlib
 sqlalchemy
+pyyaml
+seaborn
+polars
