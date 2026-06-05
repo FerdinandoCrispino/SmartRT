@@ -196,7 +196,8 @@ def sum_drc_drp_comp(drc_list: List[DRC], drp_list: List[DRP], circuito, json_fi
         plt.title(f'Compensações: {circuito}: {p} - Boxplot')
         plt_path = os.path.join(plt_path_base, f"indicadores_tensao_{p}_boxplot.png")
         plt.savefig(plt_path, dpi=300, bbox_inches='tight', transparent=False)
-        plt.show()
+        #plt.show()
+        plt.close()
 
     return result
 

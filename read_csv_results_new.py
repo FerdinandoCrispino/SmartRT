@@ -216,7 +216,9 @@ class Analisys:
         espacamento = 690
         if not bt_df.empty:
             max_under = bt_df_under.max().sum()
+            max_under = (bt_df_under['bt_undervoltage_prec'] + bt_df_under['bt_undervoltage_crit']).max()
             max_over = bt_df_over.max().sum()
+            max_over = (bt_df_over['bt_overvoltage_prec'] + bt_df_over['bt_overvoltage_crit']).max()
             escala_max = int(max(max_under, max_over) * 1.1)
 
             ax = bt_df.plot(kind='bar', stacked=True)
@@ -259,8 +261,9 @@ class Analisys:
             if self.setup_dinamico == 'True':
                 escala_max = 25
             else:
-                escala_max = int(mt_df_perc.max().sum() * 1.1)
-
+                escala_max = int((mt_df_perc['mt_undervoltage_crit'] + mt_df_perc['mt_undervoltage_prec'] +
+                                  mt_df_perc['mt_overvoltage_crit']).max() * 1.1)
+                escala_max=25
 
             ax = mt_df.plot(kind='bar', stacked=True)
             plt.title(f"BUS Violation : {circuit}")
@@ -282,6 +285,10 @@ class Analisys:
             plt.close()
         else:
             print("Sem violação de tensão MT.")
+
+        # 1. Limpar explicitamente qualquer gráfico residual na memória
+        plt.clf()
+        plt.close('all')
 
 
     def polar_read_csv(self):
@@ -547,7 +554,6 @@ if __name__ == "__main__":
     print(f"Inicialização da classe de análise gráfica para {circuito} - setup_dinamico: {usa_setup_dinamico}...")
     results = Analisys(circuito, csv_file, "pesos.csv", usa_setup_dinamico)
     # Análise das condições das barras ao longo do dia
-
 
     # prefil de tensões
     print("Gráficos de pefil de tensão...")
