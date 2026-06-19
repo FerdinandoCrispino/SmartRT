@@ -92,7 +92,13 @@ class SmartRT:
 
 
         # incremental output configuration
-        self.result_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resultados", self.circuit)
+        if usar_setup_dinamico:
+            self.result_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resultados", self.circuit,
+                                           'com_setup_dinamico')
+        else:
+            self.result_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resultados", self.circuit,
+                                           'sem_setup_dinamico')
+
         self.path_result_bus = os.path.join(self.result_dir, f"voltage_bus.csv")
         self.path_result_pesos = os.path.join(self.result_dir, f"pesos.csv")
         self._bus_buffer = []
@@ -301,11 +307,13 @@ class SmartRT:
                     # sekvbase aqui
                     dss.circuit.set_active_element(branch_name_2)
                     dss.circuit.set_active_bus(dss.cktelement.bus_names[1])
+                    bus_line_name = dss.bus.name
                     kv_base_2 = dss.bus.kv_base
                     print(f'{branch_name_2}: {dss.cktelement.bus_names}: {kv_base_2}')
-                    dss.text(f'SetkVBase Bus={bus_name1} kVLL={vll}')
-                    dss.text(f'SetkVBase Bus={bus_name1} kVLN={vln}')
+                    #dss.text(f'SetkVBase Bus={bus_name1} kVLL={vll}')
+                    dss.text(f'SetkVBase Bus={bus_line_name} kVLN={vln}')
                     print(f'Valor alterado: {dss.cktelement.bus_names[1]} - kvbase:{dss.bus.kv_base}')
+
             dss.transformers.next()
 
         self._transformer_kv_map = tr_map
@@ -405,7 +413,7 @@ class SmartRT:
         pesos = Pesos(voltage_list_faseA=df_bus_medicao_faseA['vln_pu'].tolist(),
                       voltage_list_faseB=df_bus_medicao_faseB['vln_pu'].tolist(),
                       voltage_list_faseC=df_bus_medicao_faseC['vln_pu'].tolist(),
-                      tap_faseA=tap_reg[0], tap_faseB=tap_reg[1],tap_faseC=tap_reg[2],
+                      tap_faseA=tap_reg[0], tap_faseB=tap_reg[1], tap_faseC=tap_reg[2],
                       patamar=pat_val,
                       reg_voltage_faseA=volt_bus_reg[0]['vln_pu'].values[0],
                       reg_voltage_faseB=volt_bus_reg[1]['vln_pu'].values[0],
@@ -471,7 +479,7 @@ class SmartRT:
             sec = self.dss.solution.seconds
 
             print(f"Patamar:{number}, hour: {hour}, seconds: {sec}")
-            if hour in (6, 12, 14, 19, 20, 21) and sec == 0:
+            if hour in (1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23) and sec == 0:
                 self.dss.text("Export Profile Phases=All")
                 path_dss = os.path.dirname(self.dss_file)
                 file_exp = os.path.join(path_dss, fr'{self.circuit}_EXP_Profile.CSV')
@@ -632,8 +640,12 @@ if __name__ == '__main__':
     circuito = 'RAVP1305'
     dss_file = os.path.join(application_path, fr'cenarios\{circuito}_BASE\DU_7_Master_391_AVP_RAVP1305_BASE_17280.dss')
 
-    circuito = 'RBRR1301'
-    dss_file = os.path.join(application_path, fr'cenarios\{circuito}_BASE\DU_7_Master_391_BRR_RBRR1301_BASE_17280.dss')
+    circuito = 'RMTQ1302'
+    dss_file = os.path.join(application_path, fr'cenarios\{circuito}_C-MOD_G-AGR\DU_7_Master_391_MTQ_RMTQ1302_C-MOD_G-AGR_17280.dss')
+
+
+    #circuito = 'RBRR1301'
+    #dss_file = os.path.join(application_path, fr'cenarios\{circuito}_BASE\DU_7_Master_391_BRR_RBRR1301_BASE_17280.dss')
 
 
     # Os pontos de medição devem ser da mesma fase.
