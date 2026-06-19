@@ -3,30 +3,30 @@ data_SmartRT:
   feeder_path: 'C:/SmartRT/feeders/'
   feeder:
     - 'RAVP1303_BASE'
-#    - 'RAVP1303_C-AGR_G-AGR'
-#    - 'RAVP1303_C-AGR_G-MOD'
-#    - 'RAVP1303_C-MOD_G-AGR'
-#    - 'RAVP1303_C-MOD_G-MOD'
+    - 'RAVP1303_C-AGR_G-AGR'
+    - 'RAVP1303_C-AGR_G-MOD'
+    - 'RAVP1303_C-MOD_G-AGR'
+    - 'RAVP1303_C-MOD_G-MOD'
     - 'RAVP1305_BASE'
-#    - 'RAVP1305_C-AGR_G-AGR'
-#    - 'RAVP1305_C-AGR_G-MOD'
-#    - 'RAVP1305_C-MOD_G-AGR'
-#    - 'RAVP1305_C-MOD_G-MOD'
+    - 'RAVP1305_C-AGR_G-AGR'
+    - 'RAVP1305_C-AGR_G-MOD'
+    - 'RAVP1305_C-MOD_G-AGR'
+    - 'RAVP1305_C-MOD_G-MOD'
     - 'RBOI1302_BASE'
-#    - 'RBOI1302_C-AGR'
-#    - 'RBOI1302_C-MOD'
+    - 'RBOI1302_C-AGR'
+    - 'RBOI1302_C-MOD'
     - 'RBOI1302_G-AGR'
     - 'RBOI1302_G-MOD'
     - 'RBRR1301_BASE'
-#    - 'RBRR1301_C-AGR'
-#    - 'RBRR1301_C-MOD'
+    - 'RBRR1301_C-AGR'
+    - 'RBRR1301_C-MOD'
     - 'RBRR1301_G-AGR'
     - 'RBRR1301_G-MOD'
     - 'RMTQ1302_BASE'
-#    - 'RMTQ1302_C-AGR_G-AGR'
-#    - 'RMTQ1302_C-AGR_G-MOD'
-#    - 'RMTQ1302_C-MOD_G-AGR'
-#    - 'RMTQ1302_C-MOD_G-MOD'
+    - 'RMTQ1302_C-AGR_G-AGR'
+    - 'RMTQ1302_C-AGR_G-MOD'
+    - 'RMTQ1302_C-MOD_G-AGR'
+    - 'RMTQ1302_C-MOD_G-MOD'
   points:
     RAVP1303:
       Node1:
@@ -100,19 +100,19 @@ data_SmartRT:
     RBRR1301:
       Node1:
         - 'MT4517921743612254BR01.1'
-        - 'MT453467854408563BR01.1'
+        - 'MT453275643305287BR01.1'
         - 'BT4505106843464316BR01.1'
         - 'BT4532811243785276BR01.1'
         - 'BT4549233643424908BR01.1'
       Node2:
         - 'MT4517921743612254BR01.2'
-        - 'MT453467854408563BR01.2'
+        - 'MT453275643305287BR01.2'
         - 'BT4505106843464316BR01.2'
         - 'BT4532811243785276BR01.2'
         - 'BT4549233643424908BR01.2'
       Node3:
         - 'MT4517921743612254BR01.3'
-        - 'MT453467854408563BR01.3'
+        - 'MT453275643305287BR01.3'
 
 
         - 'BT4549233643424908BR01.3'
@@ -145,8 +145,9 @@ data_SmartRT:
         - 'CREG_295RT000020129b'
   month: 7 #[1, 7]
   type_day: 'DU' #['DU', 'DO']
-  loadmult_ini: 1 # 1 para BASE e casos modificados apenas de geração "G-MOD e G-AGR"; 1.04 para Carga moderada "C-MOD"; 1.1 para Carga agressiva "C-AGR"; Comentar os feeders que não forem aplicáveis.
-  num_patamares: 144
+  num_patamares: 17280
   patamar_ini: 0
-  patamar_fim: 144
-  usar_setup_dinamico: False
+  patamar_fim: 17280
+  multiprocess: False
+  record_only_violations: True # True: Registra apenas as barras e cargas violadas; False: Registra todas as barras;
+  usar_setup_dinamico: True
