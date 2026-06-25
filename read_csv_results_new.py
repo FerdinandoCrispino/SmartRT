@@ -38,11 +38,7 @@ class Analisys:
         #self.data_circuit = full_path.parts[-2]
 
         self.load_demand = demanda_load(self.data_circuit)
-
         self.pesos_data_path  = os.path.join(self.data_dir, self.pesos_data)
-
-
-
 
     def plot_voltage_by_pesos(self, buses_phases):
 
@@ -259,11 +255,11 @@ class Analisys:
 
         if not mt_df.empty:
             if self.setup_dinamico == 'True':
-                escala_max = 25
+                escala_max = 55
             else:
                 escala_max = int((mt_df_perc['mt_undervoltage_crit'] + mt_df_perc['mt_undervoltage_prec'] +
                                   mt_df_perc['mt_overvoltage_crit']).max() * 1.1)
-                escala_max=25
+                #escala_max=25
 
             ax = mt_df.plot(kind='bar', stacked=True)
             plt.title(f"BUS Violation : {circuit}")
@@ -464,7 +460,7 @@ class Analisys:
 
                 lw = 1.5
                 if tipo == 2:
-                    lw = 0.75
+                    lw = 0.70
                 plt.plot(x, y, color=color[idcolor-1], linestyle=linetype[tipo], linewidth=lw)
 
                 # Opcional: mostrar pontos
@@ -524,6 +520,7 @@ import matplotlib.pyplot as plt
 if __name__ == "__main__":
     circuito = 'RMTQ1302'
     cenario = 'TSEA'
+    cenario = 'C-MOD_G-AGR'
 
     #circuito = 'RAVP1303'
     #cenario = 'BASE'
@@ -534,12 +531,18 @@ if __name__ == "__main__":
     #circuito = 'RAVP1305'
     #cenario = 'BASE'
 
-    circuito = 'RBRR1301'
-    cenario = 'BASE'
-    usa_setup_dinamico = 'False'
+    #circuito = 'RBRR1301'
+    #cenario = 'BASE'
+
+    usa_setup_dinamico = 'True'
 
     application_path = os.path.dirname(os.path.abspath(__file__))
-    csv_file = os.path.join(application_path, fr'resultados\{circuito}\voltage_bus.csv')
+    if usa_setup_dinamico == 'True':
+        dir_setup = 'com_setup_dinamico'
+    else:
+        dir_setup = 'sem_setup_dinamico'
+
+    csv_file = os.path.join(application_path, fr'resultados\{circuito}\{dir_setup}\voltage_bus.csv')
     # read_csv(r".\resultados\RMTQ1302\voltage_bus.csv")
 
     # Leitura dos dados de configuração das pontos de medição e dos reguladores

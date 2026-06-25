@@ -184,7 +184,7 @@ def sum_drc_drp_comp(drc_list: List[DRC], drp_list: List[DRP], circuito, json_fi
         plt.xticks(fontsize=6, rotation=45)
         plt_path = os.path.join(plt_path_base, f"indicadores_tensao_{p}_stripplot.png")
         plt.savefig(plt_path, dpi=300, bbox_inches='tight', transparent=False)
-        plt.show()
+        plt.close()
 
         fig, ax = plt.subplots()
         sns.boxplot(data=dados_comp, ax=ax)
