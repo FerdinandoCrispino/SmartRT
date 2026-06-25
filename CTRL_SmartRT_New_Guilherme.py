@@ -44,7 +44,6 @@ class Pesos:
     reg_voltage_faseB: float
     reg_voltage_faseC: float
     vreg: float
-    revvreg: float
     ptratio: float
     v_base: float
     v_reg_pu = float
@@ -56,8 +55,7 @@ class Pesos:
 
 class SmartRT:
     def __init__(self, feeder, dss_file, bus_medicao_faseA, bus_medicao_faseB, bus_medicao_faseC, regcontrolname,
-                 bus_source_change, hour_change, second_change, reg_tap_neutro, num_patamares, patamar_ini, patamar_fim,
-                 record_only_violations, usar_setup_dinamico, usar_alteracao_fonte):
+                 num_patamares, patamar_ini, patamar_fim, record_only_violations, usar_setup_dinamico):
 
         self.feeder = feeder
         self.dss_file = dss_file
@@ -70,7 +68,6 @@ class SmartRT:
 
         self.record_only_violations = record_only_violations
         self.setup_dinamico = usar_setup_dinamico
-        self.alteracao_fonte = usar_alteracao_fonte
         self.regControlName = regcontrolname
         self.reg_manual = []  # Lista de objetos - Inicia regcontrol_TSEA
         self.set_point = None # valor a ser atualizado pelo setup dimanico
@@ -93,12 +90,6 @@ class SmartRT:
         self.bus_medicao_order_map_faseC = {f"{bus.lower()}.{node}": i for i, (bus, node) in enumerate(self.bus_medicao_keys_faseC)}
 
         self.bus_medicao = list(set().union(self.bus_medicao_faseA, self.bus_medicao_faseB, self.bus_medicao_faseC))
-
-        # data for use of source change
-        self.bus_source_change = bus_source_change
-        self.hour_change = hour_change
-        self.second_change = second_change
-        self.reg_tap_neutro = reg_tap_neutro
 
         # incremental output configuration
         self.result_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resultados", self.feeder)
@@ -127,13 +118,12 @@ class SmartRT:
     def regcontrol_tsea_init(self):
         dss = self.dss
         vn = 7967  # Todo verificar necessidade de alterar para 13.8/sqrt(3)
-        list_regcontrols = self.__safe_eval_list(self.regControlName)
+        list_regcontrols = ast.literal_eval(self.regControlName)
         for reg_name in list_regcontrols:
             dss.regcontrols.name = reg_name
             tranformer = dss.regcontrols.transformer
             vreg = dss.regcontrols.forward_vreg
-            # revvreg = dss.regcontrols.reverse_vreg
-            revvreg = vreg
+            revvreg = dss.regcontrols.reverse_vreg
             band = dss.regcontrols.forward_band
             revband = dss.regcontrols.reverse_band
             pt_ratio = dss.regcontrols.pt_ratio
@@ -314,50 +304,6 @@ class SmartRT:
 
             dss.transformers.next()
 
-    def __source_change(self):
-        dss = self.dss
-        list_regControlName = self.__safe_eval_list(self.regControlName)
-        list_reg_tap_neutro = self.__safe_eval_list(self.reg_tap_neutro)
-
-        for element in self.dss.circuit.elements_names:
-            if not element.lower().startswith("transformer.reg_busa"):
-                continue
-
-            self.dss.circuit.set_active_element(element)
-            bus1_element = self.dss.cktelement.bus_names[0].split(".")[0]
-            bus2_element = self.dss.cktelement.bus_names[1].split(".")[0]
-
-            dss.text(f'edit "{element}" buses=["{bus1_element}" "{self.bus_source_change.strip("[]'")}"]')
-            print(f'FONTE DE TENSÃO ALTERADA - De: {bus2_element} Para: {self.bus_source_change.strip("[]'")} - {self.feeder}')
-            break
-
-        if self.setup_dinamico:
-            for reg in list_reg_tap_neutro:
-                reg = reg.lower()
-                dss.text(f'edit "Regcontrol.{reg}" enable=NO')
-                dss.text(f'edit "Transformer.{reg[1:]}" tap=1')
-                print(f'ALTERAÇÃO: "Regcontrol.{reg}" enable=NO; "Transformer.{reg[1:]}" tap=1; {self.feeder} - SETUP DINÂMICO')
-
-        else:
-            list_regs = list(set(list_regControlName + list_reg_tap_neutro))
-            for reg in list_regs:
-                reg = reg.lower()
-                dss.text(f'edit "Regcontrol.{reg}" enable=NO')
-                dss.text(f'edit "Transformer.{reg[1:]}" tap=1')
-                print(f'ALTERAÇÃO: "Regcontrol.{reg}" enable=NO; "Transformer.{reg[1:]}" tap=1; {self.feeder}')
-
-    def __safe_eval_list(self, value):
-        if value is None:
-            return []
-        if isinstance(value, list):
-            return value
-        if isinstance(value, str):
-            value = value.strip()
-            if value == "" or value == "None":
-                return []
-            return ast.literal_eval(value)
-        return []
-
     def _set_pesos(self, patamar_rows):
         # patamar_rows: lista de dicts contendo as tensões do patamar atual
         if isinstance(patamar_rows, pd.DataFrame):
@@ -502,7 +448,6 @@ class SmartRT:
         volt_bus_reg = []
         tap_reg = []
         fvreg = 0  # igual para todas as fases
-        frevvreg = 0  # igual para todas as fases
         pt_ratio_reg = 0.0
         v_base = 0
         list_regcontrols = ast.literal_eval(self.regControlName)
@@ -511,7 +456,6 @@ class SmartRT:
             if self.dss.regcontrols.name == reg_name.lower():
                 tap_reg.append(self.reg_manual[index].reg_manual.tap_position)
                 fvreg = self.reg_manual[index].reg_manual.vreg
-                frevvreg = self.reg_manual[index].reg_manual.revvreg
                 pt_ratio_reg = self.reg_manual[index].ptratio
                 self.dss.transformers.name = self.reg_manual[index].transformer
                 bus_node_reg_trafo = self.dss.cktelement.bus_names[1].rsplit('.', 1)[0]
@@ -545,7 +489,6 @@ class SmartRT:
                       reg_voltage_faseB=volt_bus_reg[1]['Voltage'].values[0],
                       reg_voltage_faseC=volt_bus_reg[2]['Voltage'].values[0],
                       vreg=fvreg,
-                      revvreg=frevvreg,
                       ptratio=pt_ratio_reg,
                       v_base=v_base)
 
@@ -783,17 +726,9 @@ class SmartRT:
             sec = self.dss.solution.seconds
             print(f"{self.feeder}; Patamar:{number}, Hour: {hour}, Seconds: {sec}")
 
-            # if hour == 12 and sec == 1800: #TODO - APENAS PARA TESTE - RETIRAR
-            #     exit()
-
-            if self.alteracao_fonte:
-                if self.hour_change == hour and self.second_change == sec:
-                    self.__source_change()
-
             self.loadmult_ini = self.dss.solution.load_mult
             self.dss.solution.solve()
             status = self.dss.solution.converged
-
             if status == 0:
                 for tentativa in range(ini_tentativa, max_tentativa + ini_tentativa):
                     new_load_mult = self.loadmult_ini + tentativa / 100
@@ -878,12 +813,11 @@ class SmartRT:
                             voltage_bus_rows = self.__filling_bus_violation(number, bus_name, data_voltages_completed, voltage_bus_rows)
                             break
 
-                list_regcontrols = self.__safe_eval_list(self.regControlName)
+                list_regcontrols = ast.literal_eval(self.regControlName)
                 for reg_name in list_regcontrols:
                     if self.setup_dinamico == False:
                         self.dss.regcontrols.name = reg_name
                         v_reg = self.dss.regcontrols.forward_vreg
-                        revvreg = v_reg
                         self.dss.transformers.name = self.dss.regcontrols.transformer
                         bus_reg_trafo = self.dss.cktelement.bus_names[1].split('.')[0]
                         self.dss.circuit.set_active_bus(bus_reg_trafo)
@@ -900,8 +834,7 @@ class SmartRT:
                         tap_reg.append({
                             "Number": number,
                             "Fase": phase,
-                            "Forward_vreg": v_reg,
-                            "Reverse_vreg": revvreg,
+                            "V_ref": v_reg,
                             "V_reg": v_phase,
                             "Tap": self.dss.regcontrols.tap_number
                         })
@@ -950,39 +883,24 @@ class SmartRT:
                     tensoes_faseB = set_pesos.voltage_list_faseB
                     tensoes_faseC = set_pesos.voltage_list_faseC
 
-                    try:
-                        print(set_pesos)
-                        self.set_point = setup_dinamico_TSEA_calcular(
-                            tensao_bucha_faseA=tensao_bucha_faseA,
-                            tensoes_pontos_faseA=tensoes_faseA,
-                            tap_atual_faseA=tap_atual[0],
-                            setpoint_atual_faseA=setpoint_atual,
-                            lado_forte_fonte_faseA=lado_forte_fonte[0],
-                            tensao_bucha_faseB=tensao_bucha_faseB,
-                            tensoes_pontos_faseB=tensoes_faseB,
-                            tap_atual_faseB=tap_atual[1],
-                            setpoint_atual_faseB=setpoint_atual,
-                            lado_forte_fonte_faseB=lado_forte_fonte[1],
-                            tensao_bucha_faseC=tensao_bucha_faseC,
-                            tensoes_pontos_faseC=tensoes_faseC,
-                            tap_atual_faseC=tap_atual[2],
-                            lado_forte_fonte_faseC=lado_forte_fonte[2],
-                            setpoint_atual_faseC=setpoint_atual,
-                            setpoint_ideal=self.set_point_ideal
-                        )
-                    except:
-                        print(f"Patamar: {number}")
-                        print(f"❌ ERRO:{tensoes_faseA}")
-                        print(f"❌ ERRO:{tensoes_faseB}")
-                        print(f"❌ ERRO:{tensoes_faseC}")
-                        logging.info(
-                            f'SET POINT - Feeder: {self.feeder} '
-                            f'Patamar: {number}'
-                            f'ERRO:{tensoes_faseA}'
-                            f'ERRO:{tensoes_faseB}'
-                            f'ERRO:{tensoes_faseC}'
-                            f'SELF.SET_POINT: {self.set_point}')
-                        os.wait()
+                    self.set_point = setup_dinamico_TSEA_calcular(
+                        tensao_bucha_faseA=tensao_bucha_faseA,
+                        tensoes_pontos_faseA=tensoes_faseA,
+                        tap_atual_faseA=tap_atual[0],
+                        setpoint_atual_faseA=setpoint_atual,
+                        lado_forte_fonte_faseA=lado_forte_fonte[0],
+                        tensao_bucha_faseB=tensao_bucha_faseB,
+                        tensoes_pontos_faseB=tensoes_faseB,
+                        tap_atual_faseB=tap_atual[1],
+                        setpoint_atual_faseB=setpoint_atual,
+                        lado_forte_fonte_faseB=lado_forte_fonte[1],
+                        tensao_bucha_faseC=tensao_bucha_faseC,
+                        tensoes_pontos_faseC=tensoes_faseC,
+                        tap_atual_faseC=tap_atual[2],
+                        lado_forte_fonte_faseC=lado_forte_fonte[2],
+                        setpoint_atual_faseC=setpoint_atual,
+                        setpoint_ideal=self.set_point_ideal
+                    )
 
             else:
                 # Faz a leitura dos dados das tensões das barras
@@ -1093,10 +1011,6 @@ class Task:
     bus_medicao_faseB: List[Tuple[str, str]]
     bus_medicao_faseC: List[Tuple[str, str]]
     regcontrolname: str
-    bus_source_change: str
-    hour_change: int
-    second_change: int
-    reg_tap_neutro: str
     num_patamares: int
     patamar_ini: int
     patamar_fim: int
@@ -1109,8 +1023,8 @@ def find_file(filename: str, search_path: str):
             return Path(root) / filename
     return None
 
-def run_feeder_mode(substation, feeder, months, type_days, bus_medicao_faseA, bus_medicao_faseB, bus_medicao_faseC, regcontrolname,
-                    bus_source_change, hour_change, second_change, reg_tap_neutro, num_patamares, patamar_ini, patamar_fim, config):
+def run_feeder_mode(substation, feeder, months, type_days, bus_medicao_faseA, bus_medicao_faseB, bus_medicao_faseC,
+                    regcontrolname, num_patamares, patamar_ini, patamar_fim, config):
 
     master_filename = f"{type_days[0]}_{months[0]}_Master_391_{substation}_{feeder}_{num_patamares}.dss"
     feeder_path = Path(config["feeder_path"]).resolve()
@@ -1127,16 +1041,11 @@ def run_feeder_mode(substation, feeder, months, type_days, bus_medicao_faseA, bu
                     bus_medicao_faseB=bus_medicao_faseB,
                     bus_medicao_faseC=bus_medicao_faseC,
                     regcontrolname=regcontrolname,
-                    bus_source_change=bus_source_change,
-                    hour_change=hour_change,
-                    second_change=second_change,
-                    reg_tap_neutro=reg_tap_neutro,
                     num_patamares=num_patamares,
                     patamar_ini=patamar_ini,
                     patamar_fim=patamar_fim,
                     record_only_violations=config["record_only_violations"],
-                    usar_setup_dinamico=config["usar_setup_dinamico"],
-                    usar_alteracao_fonte=config["usar_alteracao_fonte"])
+                    usar_setup_dinamico=config["usar_setup_dinamico"])
 
     if config["usar_setup_dinamico"]:
         simul.regcontrol_tsea_init()
@@ -1153,10 +1062,6 @@ def process_task(task: Task):
     bus_medicao_faseB = task.bus_medicao_faseB
     bus_medicao_faseC = task.bus_medicao_faseC
     regcontrolname = task.regcontrolname
-    bus_source_change = task.bus_source_change
-    hour_change = task.hour_change
-    second_change = task.second_change
-    reg_tap_neutro = task.reg_tap_neutro
     num_patamares = task.num_patamares
     patamar_ini = task.patamar_ini
     patamar_fim = task.patamar_fim
@@ -1179,10 +1084,6 @@ def process_task(task: Task):
             bus_medicao_faseB=bus_medicao_faseB,
             bus_medicao_faseC=bus_medicao_faseC,
             regcontrolname=regcontrolname,
-            bus_source_change=bus_source_change,
-            hour_change=hour_change,
-            second_change=second_change,
-            reg_tap_neutro=reg_tap_neutro,
             num_patamares=num_patamares,
             patamar_ini=patamar_ini,
             patamar_fim=patamar_fim,
@@ -1211,10 +1112,6 @@ def build_tasks_from_config(config: Dict) -> List[Task]:
         pontos_med_faseB = config["points"][f"{feeder[0:8]}"]["Node2"]
         pontos_med_faseC = config["points"][f"{feeder[0:8]}"]["Node3"]
         reguladores = config["points"][f"{feeder[0:8]}"]["Reguladores"]
-        alteracao_barra_fonte = config["points"][f"{feeder[0:8]}"]["source_change"]["bus_source_change"]
-        alteracao_hora = config["points"][f"{feeder[0:8]}"]["source_change"]["hour_change"]
-        alteracao_segundo = config["points"][f"{feeder[0:8]}"]["source_change"]["second_change"]
-        reguladores_tap_neutro = config["points"][f"{feeder[0:8]}"]["source_change"]["reg_tap_neutro"]
 
         for m in months:
             for td in type_days:
@@ -1226,10 +1123,6 @@ def build_tasks_from_config(config: Dict) -> List[Task]:
                     bus_medicao_faseB=pontos_med_faseB,
                     bus_medicao_faseC=pontos_med_faseC,
                     regcontrolname=str(reguladores),
-                    bus_source_change=str(alteracao_barra_fonte),
-                    hour_change=int(alteracao_hora),
-                    second_change=int(alteracao_segundo),
-                    reg_tap_neutro=str(reguladores_tap_neutro),
                     num_patamares=int(num_patamares),
                     patamar_ini=int(patamar_ini),
                     patamar_fim=int(patamar_fim),
@@ -1254,15 +1147,14 @@ if __name__ == '__main__':
         sys.exit(1)
 
     if config["multiprocess"]:
-        cpu_cores = max(multiprocessing.cpu_count() - 11, 1)
+        cpu_cores = max(multiprocessing.cpu_count() - 3, 1)
         print(f"⚡ Utilizando {cpu_cores} processadores.")
 
         with multiprocessing.Pool(processes=cpu_cores) as pool:
             pool.map(process_task, tasks)
 
     else:
-        for task in tasks:
-            process_task(task)
+        process_task(tasks[0])
 
     fim = time.time()
     tempo_total = fim - inicio
