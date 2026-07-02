@@ -2,10 +2,12 @@ import py_dss_interface
 import pandas as pd
 import numpy as np
 import polars as pl
+import gc
 import time
 import os
 import matplotlib
 import yaml
+import psutil
 from pathlib import Path
 from dataclasses import dataclass
 from DRP_DRC import demanda_load, indic_DRP_DRC
@@ -20,12 +22,21 @@ def get_loads(dss, dss_file):
     """
     Retorna listas de cargas separadas em BT e MT
     """
+    print(f"GET_LOADS - INÍCIO")
     loads_bt = list()
     loads_mt = list()
     loads_pip = list()
     loads_TOTAL = list()
 
-    dss.text(f"compile [{dss_file}]")
+    # dss.text(f"compile [{dss_file}]")
+
+    dss.text(f"set Datapath = '{os.path.dirname(dss_file)}'")
+    with open(os.path.join(dss_file), 'r') as file:
+        for line_dss in file:
+            if not (line_dss.startswith('!') or line_dss.startswith('\n')):
+                dss.text(line_dss.strip('\n'))
+            if 'calc' in line_dss:
+                break
 
     dss.loads.first()
     for _ in range(dss.loads.count):
@@ -56,6 +67,7 @@ def get_loads(dss, dss_file):
 
     total_loads_bt = len(loads_bt)
     total_loads_mt = len(loads_mt)
+    print(f"GET_LOADS - FIM")
 
     return total_loads_bt, total_loads_mt
 
@@ -63,12 +75,21 @@ def get_nodes(dss, dss_file):
     """
     Retorna uma lista de nós violados
     """
+    print(f"GET_NODES - INÍCIO")
     total_nodes_bt = list()
     total_nodes_mt = list()
 
-    dss.text(f"compile [{dss_file}]")
-    nodes_names = dss.circuit.nodes_names
+    # dss.text(f"compile [{dss_file}]")
 
+    dss.text(f"set Datapath = '{os.path.dirname(dss_file)}'")
+    with open(os.path.join(dss_file), 'r') as file:
+        for line_dss in file:
+            if not (line_dss.startswith('!') or line_dss.startswith('\n')):
+                dss.text(line_dss.strip('\n'))
+            if 'calc' in line_dss:
+                break
+
+    nodes_names = dss.circuit.nodes_names
     for node in nodes_names:
         if node.lower().startswith("mt") or node.split(".")[0].lower().startswith("busa"):
             total_nodes_mt.append(node)
@@ -80,22 +101,11 @@ def get_nodes(dss, dss_file):
     total_nodes_names = len(nodes_names)
     total_nodes_bt = len(total_nodes_bt)
     total_nodes_mt = len(total_nodes_mt)
+    print(f"GET_NODES - FIM")
 
     return total_nodes_bt, total_nodes_mt, total_nodes_names
 
-def plotar_voltage(df, titulo, tipo, feeder, caminho_arquivo, patamar_ini, patamar_fim):
-    all_numbers = np.arange(patamar_ini, patamar_fim + 1)
-
-    df_count = (df.groupby(["Number", "Occurrence"]).size().unstack(fill_value=0).reindex(all_numbers, fill_value=0))
-
-    ordem = [
-        "Subtensão Precária",
-        "Subtensão Crítica",
-        "Sobretensão Precária",
-        "Sobretensão Crítica"
-    ]
-
-    df_count = df_count.reindex(columns=ordem, fill_value=0)
+def plotar_voltage(df_count, titulo, tipo, feeder, caminho_arquivo, patamar_ini, patamar_fim):
 
     grupos = [("subtensao", ["Subtensão Precária", "Subtensão Crítica"]),
              ("sobretensao", ["Sobretensão Precária", "Sobretensão Crítica"])]
@@ -130,7 +140,7 @@ def plotar_voltage(df, titulo, tipo, feeder, caminho_arquivo, patamar_ini, patam
         ax.grid(axis="y", linestyle="-", alpha=0.6, color="gray")
 
         if patamar_fim not in (24, 144):
-            step = int(max(1, len(all_numbers) // (patamar_fim / 690))) # TODO
+            step = int(max(1, len(all_numbers) // (patamar_fim / 690)))
             xticks = all_numbers[::step]
             ax.tick_params(axis='x', rotation=90)
             ax.set_xticks(xticks)
@@ -147,19 +157,8 @@ def plotar_voltage(df, titulo, tipo, feeder, caminho_arquivo, patamar_ini, patam
         plt.savefig(arquivo_saida, dpi=300, bbox_inches="tight")
         plt.close()
 
-def plotar_voltage_per(df, titulo, tipo, feeder, caminho_arquivo, total_loads, patamar_ini, patamar_fim):
-    all_numbers = np.arange(patamar_ini, patamar_fim + 1)
+def plotar_voltage_per(df_count, titulo, tipo, feeder, caminho_arquivo, total_loads, patamar_ini, patamar_fim):
 
-    df_count = (df.groupby(["Number", "Occurrence"]).size().unstack(fill_value=0).reindex(all_numbers, fill_value=0))
-
-    ordem = [
-        "Subtensão Precária",
-        "Subtensão Crítica",
-        "Sobretensão Precária",
-        "Sobretensão Crítica"
-    ]
-
-    df_count = df_count.reindex(columns=ordem, fill_value=0)
     df_percent = (df_count / total_loads) * 100
 
     grupos = [("subtensao", ["Subtensão Precária", "Subtensão Crítica"]),
@@ -188,14 +187,23 @@ def plotar_voltage_per(df, titulo, tipo, feeder, caminho_arquivo, total_loads, p
 
         if nome_grupo == "subtensao":
             ax.set_title(f"{titulo} {tipo}: Subtensão - {feeder}")
+            # if tipo == "BT Violadas":
+            #     ax.set_ylim(0, 50)  # TODO - USAR QUANDO NECESSÁRIO
+            # if tipo == "MT Violadas":
+            #     ax.set_ylim(0, 35)  # TODO - USAR QUANDO NECESSÁRIO
+
         else:
             ax.set_title(f"{titulo} {tipo}: Sobretensão - {feeder}")
+            # if tipo == "BT Violadas":
+            #     ax.set_ylim(0, 16)  # TODO - USAR QUANDO NECESSÁRIO
+            # if tipo == "MT Violadas":
+            #     ax.set_ylim(0, 12)  # TODO - USAR QUANDO NECESSÁRIO
 
         ax.legend(title=None)
         ax.grid(axis="y", linestyle="-", alpha=0.6, color="gray")
 
         if patamar_fim not in (24, 144):
-            step = int(max(1, len(all_numbers) // (patamar_fim / 690))) # TODO
+            step = int(max(1, len(all_numbers) // (patamar_fim / 690)))
             xticks = all_numbers[::step]
             ax.tick_params(axis='x', rotation=90)
             ax.set_xticks(xticks)
@@ -291,10 +299,15 @@ def plotar_taps(df, caminho_arquivo, patamar_ini, patamar_fim):
         axes[0].plot(all_numbers, df_fase['Tap'], linewidth=1.5, color='blue')
         axes[0].set_title(f'TAP {titulo_fase}', fontsize=10)
         axes[0].tick_params(axis='both', labelsize=10)
+        # axes[0].set_ylim(-17, 1) # TODO - USAR QUANDO NECESSÁRIO
+        # axes[0].set_yticks(np.arange(-17, 1, 2)) # TODO - USAR QUANDO NECESSÁRIO
 
-        axes[1].plot(all_numbers, df_fase['V_ref'], linewidth=1.5, color='red')
+        # axes[1].plot(all_numbers, df_fase['V_ref'], linewidth=1.5, color='red') # TODO - USAR QUANDO NECESSÁRIO - RETIRAR
+        axes[1].plot(all_numbers, df_fase['Forward_vreg'], linewidth=1.5, color='red', label='Forward_vreg')
+        axes[1].plot(all_numbers, df_fase['Reverse_vreg'], linewidth=1.5, color='black', label='Reverse_vreg') # TODO - USAR QUANDO NECESSÁRIO
         axes[1].set_title('Vref', fontsize=10)
         axes[1].tick_params(axis='both', labelsize=10)
+        axes[1].legend(fontsize=9, loc='best') # TODO - USAR QUANDO NECESSÁRIO
 
         axes[2].plot(all_numbers, df_fase['V_reg'], linewidth=1.5, color='green')
         axes[2].set_title('Vreg', fontsize=10)
@@ -307,6 +320,11 @@ def plotar_taps(df, caminho_arquivo, patamar_ini, patamar_fim):
         arquivo_saida = (caminho_arquivo.parent / f"{caminho_arquivo.stem}_{fase}{caminho_arquivo.suffix}")
         plt.savefig(arquivo_saida, dpi=300, bbox_inches='tight')
         plt.close()
+
+def memoria():
+    processo = psutil.Process(os.getpid())
+    memoria = processo.memory_info().rss / (1024**3)
+    print(f"RAM utilizada: {memoria:.2f} GB")
 
 
 @dataclass
@@ -785,6 +803,7 @@ class Analisys:
 if __name__ == "__main__":
     application_path = os.path.dirname(os.path.abspath(__file__))
     config_path = os.path.join(application_path, "config_smartRT.yml")
+    # config_path = os.path.join(application_path, "config_smart_teste.yml")  # TODO - ATENÇÃO AO CONFIG UTILIZADO
     dss = py_dss_interface.DSS()
 
     inicio = time.time()
@@ -805,24 +824,24 @@ if __name__ == "__main__":
         for feeder in feeders:
             print(f"🚀 Processando o Feeder: {feeder}")
 
-            # 1. Caminho dos arquivos
             substation = feeder[1:4]
             measurement_node1 = config["points"][f"{feeder[0:8]}"]["Node1"]
             measurement_node2 = config["points"][f"{feeder[0:8]}"]["Node2"]
             measurement_node3 = config["points"][f"{feeder[0:8]}"]["Node3"]
-            reguladores = config["points"][f"{feeder[0:8]}"]["Reguladores"]
-            regulador = reguladores[0].lower()
-            regulator_name = regulador[:-1]
+
+            dss_file = Path(f"C:/SmartRT/feeders/{feeder}/{type_days}_{months}_Master_391_{substation}_{feeder}_{num_patamares}.dss")
 
             if setup_dinamico == True:
                 file_taps = Path(f"E:/SmartRT/resultados/{num_patamares}/{feeder}/pesos.csv") #TODO - CONFIRMAR ENDEREÇO
                 df_pesos = pd.read_csv(file_taps)
-                df_pesos = df_pesos[["patamar", "vreg", "reg_voltage_faseA", "reg_voltage_faseB", "reg_voltage_faseC", "tap_faseA", "tap_faseB", "tap_faseC"]]
+                # df_pesos = df_pesos[["patamar", "vreg", "reg_voltage_faseA", "reg_voltage_faseB", "reg_voltage_faseC", "tap_faseA", "tap_faseB", "tap_faseC"]] # TODO - USAR QUANDO NECESSÁRIO - RETIRAR
+                df_pesos = df_pesos[["patamar", "vreg", "revvreg", "reg_voltage_faseA", "reg_voltage_faseB", "reg_voltage_faseC", "tap_faseA", "tap_faseB", "tap_faseC"]]
                 df_taps = (pd.concat([
                             pd.DataFrame({
                                 "Number": df_pesos["patamar"],
                                 "Fase": fase,
-                                "V_ref": df_pesos["vreg"],
+                                "Forward_vreg": df_pesos["vreg"],
+                                "Reverse_vreg": df_pesos["revvreg"],
                                 "V_reg": df_pesos[f"reg_voltage_fase{fase}"],
                                 "Tap": df_pesos[f"tap_fase{fase}"]
                             })
@@ -833,24 +852,28 @@ if __name__ == "__main__":
                 file_taps = Path(f"E:/SmartRT/resultados/{num_patamares}/{feeder}/taps.csv") #TODO - CONFIRMAR ENDEREÇO
                 df_taps = pd.read_csv(file_taps)
 
-            file_voltage_element = Path(f"E:/SmartRT/resultados/{num_patamares}/{feeder}/voltage_element.csv") #TODO - CONFIRMAR ENDEREÇO
-            file_voltage_bus = Path(f"E:/SmartRT/resultados/{num_patamares}/{feeder}/voltage_bus.csv") #TODO - CONFIRMAR ENDEREÇO
-            file_voltage_measurement = Path(f"E:/SmartRT/resultados/{num_patamares}/{feeder}/voltage_measurement.csv") #TODO - CONFIRMAR ENDEREÇO
-            dss_file = Path(f"C:/SmartRT/feeders/{feeder}/{type_days}_{months}_Master_391_{substation}_{feeder}_{num_patamares}.dss") #TODO - CONFIRMAR ENDEREÇO
+            file_taps_path = file_taps.parent / f"{feeder}_taps.png"
+            plotar_taps(df_taps, file_taps_path, patamar_ini, patamar_fim)
 
-            # 2. Ler o Excel
-            df_voltage_element = pd.read_csv(file_voltage_element)
-            df_voltage_bus = pd.read_csv(file_voltage_bus)
+            del df_taps
+            gc.collect()
+            print(f"Taps ✅")
+            memoria()
+
+            file_voltage_measurement = Path(f"E:/SmartRT/resultados/{num_patamares}/{feeder}/voltage_measurement.csv")  # TODO - CONFIRMAR ENDEREÇO
+            file_voltage_measurement_path = file_voltage_measurement.parent / f"{feeder}_measurement.png"
             df_voltage_measurement = pd.read_csv(file_voltage_measurement)
+            plotar_measurement(df_voltage_measurement, file_voltage_measurement_path, measurement_node1, measurement_node2, measurement_node3, patamar_ini, patamar_fim)
 
-            # 3. Filtrar apenas elementos que terminam com m1
-            df_voltage_element = df_voltage_element[df_voltage_element["Element"].str.endswith("m1")]
+            del df_voltage_measurement
+            gc.collect()
+            print(f"Pontos de Medição ✅")
+            memoria()
 
-            # 4. Remover duplicidade
-            df_voltage_element = df_voltage_element.drop_duplicates(subset=["Number", "Element", "Occurrence"])
-            df_voltage_bus = df_voltage_bus.drop_duplicates(subset=["Number", "Bus", "Node", "Occurrence"])
+            total_loads_bt, total_loads_mt = get_loads(dss, dss_file)
+            total_nodes_bt, total_nodes_mt, total_nodes_names = get_nodes(dss, dss_file)
+            memoria()
 
-            # 5. Definir prioridade
             prioridade = {
                 "sobre_critica": 4,
                 "sub_critica": 3,
@@ -858,20 +881,6 @@ if __name__ == "__main__":
                 "sub_precaria": 1
             }
 
-            # 6. Criar coluna de prioridade
-            df_voltage_element["priority"] = df_voltage_element["Occurrence"].map(prioridade).fillna(0)
-
-            # 7. Selecionar pior caso por (Number, Element)
-            df_voltage_element = df_voltage_element.loc[df_voltage_element.groupby(["Number", "Element"])["priority"].idxmax()]
-
-            # 8. Dataframe filtrado
-            df_voltage_element_filtered = df_voltage_element[["Number", "Element", "Occurrence"]]
-            df_voltage_bus_filtered = df_voltage_bus[["Number", "Bus", "Node", "Occurrence"]]
-
-            del df_voltage_element
-            del df_voltage_bus
-
-            # 9. Mapear ocorrências
             map_ocorrencias = {
                 "sobre_critica": "Sobretensão Crítica",
                 "sobre_precaria": "Sobretensão Precária",
@@ -879,51 +888,129 @@ if __name__ == "__main__":
                 "sub_critica": "Subtensão Crítica"
             }
 
-            df_voltage_element_filtered["Occurrence"] = df_voltage_element_filtered["Occurrence"].map(map_ocorrencias)
-            df_voltage_bus_filtered["Occurrence"] = df_voltage_bus_filtered["Occurrence"].map(map_ocorrencias)
+            ordem = [
+                "Subtensão Precária",
+                "Subtensão Crítica",
+                "Sobretensão Precária",
+                "Sobretensão Crítica"
+            ]
 
-            # 10. Separar BT e MT
-            df_voltage_element_bt = df_voltage_element_filtered[df_voltage_element_filtered["Element"].str.startswith("Load.bt")]
-            df_voltage_element_mt = df_voltage_element_filtered[df_voltage_element_filtered["Element"].str.startswith("Load.mt")]
-            df_voltage_bus_bt = df_voltage_bus_filtered[df_voltage_bus_filtered["Bus"].str.startswith("bt")]
-            df_voltage_bus_mt = df_voltage_bus_filtered[df_voltage_bus_filtered["Bus"].str.startswith("mt")]
+            all_numbers = np.arange(patamar_ini, patamar_fim + 1)
 
-            del df_voltage_element_filtered
-            del df_voltage_bus_filtered
-
-            # 11. Contabilizar as cargas e as barras em BT e MT
-            total_loads_bt, total_loads_mt = get_loads(dss, dss_file)
-            total_nodes_bt, total_nodes_mt, total_nodes_names = get_nodes(dss, dss_file)
-
-            # 12. Caminho para salvar os gráficos
+            file_voltage_element = Path(f"E:/SmartRT/resultados/{num_patamares}/{feeder}/voltage_element.csv") #TODO - CONFIRMAR ENDEREÇO
             file_voltage_element_bt = file_voltage_element.parent / f"{feeder}_BT.png"
             file_voltage_element_mt = file_voltage_element.parent / f"{feeder}_MT.png"
             file_voltage_element_bt_per = file_voltage_element.parent / f"{feeder}_BT_per.png"
             file_voltage_element_mt_per = file_voltage_element.parent / f"{feeder}_MT_per.png"
 
+            print(f"Executando o tratamento dos elementos violados")
+            df_voltage_element = (pl.scan_csv(file_voltage_element).select(["Number", "Element", "Occurrence"])
+                                    .filter(pl.col("Element").str.ends_with("m1"))
+                                    .with_columns(pl.col("Occurrence").replace(prioridade).fill_null(0).alias("priority"))
+                                    .group_by(["Number", "Element"]).agg([pl.col("Occurrence").max_by("priority"), pl.col("priority").max()])
+                                    .with_columns(pl.col("Occurrence").replace(map_ocorrencias)))
+            df_voltage_element_bt = (df_voltage_element.filter(pl.col("Element").str.starts_with("Load.bt")).select(["Number", "Occurrence"]))
+            df_count_element_bt = (df_voltage_element_bt.group_by(["Number", "Occurrence"]).agg(pl.len().alias("count")).collect(engine="streaming"))
+            df_count_element_bt = (df_count_element_bt.pivot(index="Number", on="Occurrence", values="count", aggregate_function="sum"))
+            df_count_element_bt = (df_count_element_bt.join(pl.DataFrame({"Number": all_numbers}), on="Number", how="right").fill_null(0))
+
+            for col in ordem:
+                if col not in df_count_element_bt.columns:
+                    df_count_element_bt = df_count_element_bt.with_columns(pl.lit(0).alias(col))
+
+            df_count_element_bt = df_count_element_bt.select(["Number"] + ordem)
+
+            print(f"Criando dataframe de cargas BT")
+            df_count_element_bt = df_count_element_bt.to_pandas()
+            memoria()
+
+            plotar_voltage(df_count_element_bt, "CARGAS", "BT Violadas", feeder, file_voltage_element_bt, patamar_ini, patamar_fim)
+            plotar_voltage_per(df_count_element_bt, f"CARGAS", "BT Violadas", feeder, file_voltage_element_bt_per, total_loads_bt, patamar_ini, patamar_fim)
+
+            del df_voltage_element_bt
+            del df_count_element_bt
+            gc.collect()
+
+            df_voltage_element_mt = (df_voltage_element.filter(pl.col("Element").str.starts_with("Load.mt")).select(["Number", "Occurrence"]))
+            df_count_element_mt = (df_voltage_element_mt.group_by(["Number", "Occurrence"]).agg(pl.len().alias("count")).collect(engine="streaming"))
+            df_count_element_mt = (df_count_element_mt.pivot(index="Number", on="Occurrence", values="count", aggregate_function="sum"))
+            df_count_element_mt = (df_count_element_mt.join(pl.DataFrame({"Number": all_numbers}), on="Number", how="right").fill_null(0))
+
+            for col in ordem:
+                if col not in df_count_element_mt.columns:
+                    df_count_element_mt = df_count_element_mt.with_columns(pl.lit(0).alias(col))
+
+            df_count_element_mt = df_count_element_mt.select(["Number"] + ordem)
+
+            print(f"Criando dataframe de cargas MT")
+            df_count_element_mt = df_count_element_mt.to_pandas()
+            memoria()
+
+            plotar_voltage(df_count_element_mt, "CARGAS", "MT Violadas", feeder, file_voltage_element_mt, patamar_ini, patamar_fim)
+            plotar_voltage_per(df_count_element_mt, f"CARGAS", "MT Violadas", feeder, file_voltage_element_mt_per, total_loads_mt, patamar_ini, patamar_fim)
+
+            del df_voltage_element_mt
+            del df_count_element_mt
+            del df_voltage_element
+            gc.collect()
+            print(f"Cargas ✅")
+            memoria()
+
+            file_voltage_bus = Path(f"E:/SmartRT/resultados/{num_patamares}/{feeder}/voltage_bus.csv")  # TODO - CONFIRMAR ENDEREÇO
             file_voltage_bus_bt = file_voltage_bus.parent / f"{feeder}_BT_bus.png"
             file_voltage_bus_mt = file_voltage_bus.parent / f"{feeder}_MT_bus.png"
             file_voltage_bus_bt_per = file_voltage_bus.parent / f"{feeder}_BT_bus_per.png"
             file_voltage_bus_mt_per = file_voltage_bus.parent / f"{feeder}_MT_bus_per.png"
 
-            file_voltage_measurement = file_voltage_measurement.parent / f"{feeder}_measurement.png"
+            print("Executando o tratamento das barras violadas")
+            df_voltage_bus = (pl.scan_csv(file_voltage_bus).select(["Number", "Bus", "Node", "Occurrence"])
+                                .with_columns(pl.col("Occurrence").replace(map_ocorrencias))
+                                .filter(pl.col("Occurrence") != "adequada"))
+            df_voltage_bus_bt = (df_voltage_bus.filter(pl.col("Bus").str.starts_with("bt")).select(["Number", "Occurrence"]))
+            df_count_bus_bt = (df_voltage_bus_bt.group_by(["Number", "Occurrence"]).agg(pl.len().alias("count")).collect())
+            df_count_bus_bt = (df_count_bus_bt.pivot(index="Number", on="Occurrence", values="count", aggregate_function="sum"))
+            df_count_bus_bt = (df_count_bus_bt.join(pl.DataFrame({"Number": all_numbers}), on="Number", how="right").fill_null(0))
 
-            file_taps_reg = file_taps.parent / f"{feeder}_taps.png"
+            for col in ordem:
+                if col not in df_count_bus_bt.columns:
+                    df_count_bus_bt = df_count_bus_bt.with_columns(pl.lit(0).alias(col))
+            df_count_bus_bt = df_count_bus_bt.select(["Number"] + ordem)
 
-            # 13. Função para gerar gráfico
-            plotar_voltage(df_voltage_element_bt, f"CARGAS", "BT Violadas", feeder, file_voltage_element_bt, patamar_ini, patamar_fim)
-            plotar_voltage(df_voltage_element_mt, f"CARGAS", "MT Violadas", feeder, file_voltage_element_mt, patamar_ini, patamar_fim)
-            plotar_voltage_per(df_voltage_element_bt, f"CARGAS", "BT Violadas", feeder, file_voltage_element_bt_per, total_loads_bt, patamar_ini, patamar_fim)
-            plotar_voltage_per(df_voltage_element_mt, f"CARGAS", "MT Violadas", feeder, file_voltage_element_mt_per, total_loads_mt, patamar_ini, patamar_fim)
+            print("Criando dataframe de barras BT")
+            df_count_bus_bt = df_count_bus_bt.to_pandas()
+            memoria()
 
-            plotar_voltage(df_voltage_bus_bt, f"BARRAS", "BT Violadas", feeder, file_voltage_bus_bt, patamar_ini, patamar_fim)
-            plotar_voltage(df_voltage_bus_mt, f"BARRAS", "MT Violadas", feeder, file_voltage_bus_mt, patamar_ini, patamar_fim)
-            plotar_voltage_per(df_voltage_bus_bt, f"BARRAS", "BT Violadas", feeder, file_voltage_bus_bt_per, total_nodes_names, patamar_ini, patamar_fim)
-            plotar_voltage_per(df_voltage_bus_mt, f"BARRAS", "MT Violadas", feeder, file_voltage_bus_mt_per, total_nodes_names, patamar_ini, patamar_fim)
+            plotar_voltage(df_count_bus_bt, "BARRAS", "BT Violadas", feeder, file_voltage_bus_bt, patamar_ini, patamar_fim)
+            plotar_voltage_per(df_count_bus_bt, "BARRAS", "BT Violadas", feeder, file_voltage_bus_bt_per, total_nodes_names, patamar_ini, patamar_fim)
 
-            plotar_measurement(df_voltage_measurement, file_voltage_measurement, measurement_node1, measurement_node2, measurement_node3, patamar_ini, patamar_fim)
+            del df_voltage_bus_bt
+            del df_count_bus_bt
+            gc.collect()
 
-            plotar_taps(df_taps, file_taps_reg, patamar_ini, patamar_fim)
+            df_voltage_bus_mt = (df_voltage_bus.filter(pl.col("Bus").str.starts_with("mt")).select(["Number", "Occurrence"]))
+            df_count_bus_mt = (df_voltage_bus_mt.group_by(["Number", "Occurrence"]).agg(pl.len().alias("count")).collect(engine="streaming"))
+            df_count_bus_mt = (df_count_bus_mt.pivot(index="Number", on="Occurrence", values="count", aggregate_function="sum"))
+            df_count_bus_mt = (df_count_bus_mt.join(pl.DataFrame({"Number": all_numbers}), on="Number", how="right").fill_null(0))
+
+            for col in ordem:
+                if col not in df_count_bus_mt.columns:
+                    df_count_bus_mt = df_count_bus_mt.with_columns(pl.lit(0).alias(col))
+
+            df_count_bus_mt = df_count_bus_mt.select(["Number"] + ordem)
+
+            print(f"Criando dataframe de barras MT")
+            df_count_bus_mt = df_count_bus_mt.to_pandas()
+            memoria()
+
+            plotar_voltage(df_count_bus_mt, "BARRAS", "MT Violadas", feeder, file_voltage_bus_mt, patamar_ini, patamar_fim)
+            plotar_voltage_per(df_count_bus_mt, "BARRAS", "MT Violadas", feeder, file_voltage_bus_mt_per, total_nodes_names, patamar_ini, patamar_fim)
+
+            del df_voltage_bus_mt
+            del df_count_bus_mt
+            del df_voltage_bus
+            gc.collect()
+            print("Barras ✅")
+            memoria()
 
     else:
         for feeder in feeders:
