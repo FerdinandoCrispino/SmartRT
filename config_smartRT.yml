@@ -2,11 +2,11 @@
 data_SmartRT:
   feeder_path: 'C:/SmartRT/feeders/'
   feeder:
-    - 'RAVP1303_BASE'
+#    - 'RAVP1303_BASE'
 #    - 'RAVP1305_BASE'
 #    - 'RBOI1302_BASE'
 #    - 'RBRR1301_BASE'
-#    - 'RMTQ1302_BASE'
+    - 'RMTQ1302_BASE'
 #    - 'RMTQ1302_C-AGR_G-AGR'
 #    - 'RMTQ1302_C-AGR_G-MOD'
 #    - 'RMTQ1302_C-MOD_G-AGR'

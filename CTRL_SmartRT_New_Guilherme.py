@@ -23,7 +23,6 @@ import logging
 logging.basicConfig(filename='CTRL_SmartRT_new.log', level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d,%H:%M:%S')
 
-
 def convert2polar(real, imag):
     z = complex(real, imag)
     return cmath.polar(z)
@@ -245,9 +244,9 @@ class SmartRT:
         """
         Verifica a tensão de base definida pelo openDSS para as todas as barras conectadas
         no secundario dos transformadores.
-        São obtidas as tensões de fase para a barra do secundario do TR e comparada com a informada pelo openDSS
+        São obtidas as tensões de fase para a barra do secundario do TR e compara com a informada pelo openDSS
         Em caso de diferença são localizadas todas barras conectadas no secundario do transformador e set o kv_base
-        de todas as barras com o valor obtido da avaliação das conecções do transformador.
+        de todas as barras com o valor obtido da avaliação das conexoes do transformador.
         :return:
         """
         dss = self.dss
@@ -747,7 +746,7 @@ class SmartRT:
 
     def solve_circuit(self):
         ini_tentativa = 1  # valor inicial para o loadmult
-        max_tentativa = 10  # número de tentativas após não covergência
+        max_tentativa = 20  # número de tentativas após não convergência
         patamar_ini = self.patamar_ini
         patamar_fim = self.patamar_fim
 
@@ -778,41 +777,47 @@ class SmartRT:
             except OSError:
                 pass
 
+        self.loadmult_ini = self.dss.solution.load_mult
         for number in range(patamar_ini, patamar_fim + 1):
             hour = self.dss.solution.hour
             sec = self.dss.solution.seconds
             print(f"{self.feeder}; Patamar:{number}, Hour: {hour}, Seconds: {sec}")
 
-            # if hour == 12 and sec == 1800: #TODO - APENAS PARA TESTE - RETIRAR
-            #     exit()
-
             if self.alteracao_fonte:
                 if self.hour_change == hour and self.second_change == sec:
                     self.__source_change()
 
-            self.loadmult_ini = self.dss.solution.load_mult
             self.dss.solution.solve()
             status = self.dss.solution.converged
 
             if status == 0:
                 for tentativa in range(ini_tentativa, max_tentativa + ini_tentativa):
-                    new_load_mult = self.loadmult_ini + tentativa / 100
+                    passo = (tentativa + 1) // 2
+                    if tentativa % 2 == 1:
+                        new_load_mult = self.loadmult_ini + passo / 100
+                    else:
+                        new_load_mult = self.loadmult_ini - passo / 100
+
                     self.dss.text(f"set loadmult={new_load_mult}")
                     self.dss.text(f"set time = ({hour}, {sec})")
 
                     self.dss.solution.solve()
                     status = self.dss.solution.converged
-                    if status == 0:
-                        continue
-
-                    elif status == 0 and tentativa == max_tentativa:
+                    if status == 0 and tentativa == max_tentativa:
                         print(f'❌ OpenDSS: File {self.dss_file} changed loadMult {new_load_mult} and NOT SOLVED - Patamar:{number}, Hour: {hour}, Seconds: {sec}')
                         logging.info(
                             f'OpenDSS: File {self.dss_file} NOT SOLVED! - loadmult={new_load_mult} '
-                            f'Set number: {number}, hour: {hour}, seconds: {sec}, event: {self.dss.solution.event_log}')
+                            f'Set number: {number}, hour: {hour}, seconds: {sec}') #, event: {self.dss.solution.event_log}')
+                        self.dss.text(f"set loadmult={self.loadmult_ini}")
+                        self.__check_kv_base()
+
+                    elif status == 0:
+                        logging.info(f'OpenDSS:{self.feeder} - NOT SOLVED - Patamar:{number} - Tentativa:{tentativa} - loadmult_ini:{self.loadmult_ini} - new_load_mult:{new_load_mult}')
+                        continue
 
                     else:
                         print(f'⚠️ OpenDSS: Feeder {self.feeder} changed loadMult {new_load_mult} and SOLVED - Patamar:{number}, Hour: {hour}, Seconds: {sec}')
+                        logging.info(f'OpenDSS:{self.feeder} - SOLVED - Patamar:{number} - Tentativa:{tentativa} - loadmult_ini:{self.loadmult_ini} - new_load_mult:{new_load_mult}')
                         self.dss.text(f"set loadmult={self.loadmult_ini}")
                         self.__check_kv_base()
                         if hour in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24) and sec == 0:
@@ -968,7 +973,8 @@ class SmartRT:
                             tap_atual_faseC=tap_atual[2],
                             lado_forte_fonte_faseC=lado_forte_fonte[2],
                             setpoint_atual_faseC=setpoint_atual,
-                            setpoint_ideal=self.set_point_ideal
+                            setpoint_ideal=self.set_point_ideal,
+                            ativa_depuracao=True
                         )
                     except:
                         print(f"Patamar: {number}")
