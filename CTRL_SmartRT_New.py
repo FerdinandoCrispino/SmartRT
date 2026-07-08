@@ -36,6 +36,12 @@ def convert2polar(real, imag):
 def safe_divide(numerator, denominator):
     return numerator / denominator if denominator != 0 else 0
 
+def gerador_positivo_negativo():
+    numero = 1
+    while True:
+        yield numero
+        yield -numero
+        numero += 1
 
 @dataclass
 class Pesos:
@@ -109,9 +115,10 @@ class SmartRT:
         self.dss = self._read_dss_file()
 
         # função imprime o transformado da barra bt de medição para avaliar as suas fases correspondentes na MT
-        #self._localiza_transformer()
+        # executar somente para auxiliar na configuração do sistema
+        self._localiza_transformer()
 
-        # Check kv_base
+        # Verifica a correta atribuição das tensões de base para os transformadores não trifásicos
         self.__check_kv_base()
 
         if usar_setup_dinamico:
@@ -147,9 +154,23 @@ class SmartRT:
 
 
     def _localiza_transformer(self):
+        """
+        Localiza o transformador que alimneta o barras de referencia para o smartRT
+        e retorna os nos das barras e os nos dos transformadores.
+        Utilizado para auxiliar na configuração dos nos no arquivo smartRT.yml
+        :return: None
+        """
+        pontos_med_keys = []
         dss = self.dss
         dss.transformers.first()
-        pontos_med_keys = [item.split('.')[0] for item in self.bus_medicao_faseA]
+        pontos_med_keys_faseA = [item.split('.')[0] for item in self.bus_medicao_faseA]
+        pontos_med_keys_faseB = [item.split('.')[0] for item in self.bus_medicao_faseB]
+        pontos_med_keys_faseC = [item.split('.')[0] for item in self.bus_medicao_faseC]
+        pontos_med_keys.extend(pontos_med_keys_faseA)
+        pontos_med_keys.extend(pontos_med_keys_faseB)
+        pontos_med_keys.extend(pontos_med_keys_faseC)
+        pontos_med_keys = list(set(pontos_med_keys))            # remove duplicados
+
         pontos_med = [bus.lower() for bus in pontos_med_keys]
 
         for _ in range(dss.transformers.count):
@@ -159,10 +180,11 @@ class SmartRT:
             dss.circuit.set_active_element(f"transformer.{dss.transformers.name}")
             bus_name = dss.cktelement.bus_names
             element_name = dss.cktelement.name
+            tr_nodes = dss.cktelement.node_order
             dss.circuit.set_active_bus(bus_name[1])
             bus_name1 = dss.bus.name
             if bus_name1 in pontos_med:
-                print('trasformador localizado')
+                print('trasformador localizado.')
                 dss.circuit.set_active_element(element_name)
                 print(f'bus:{dss.bus.name}, Nodes:{dss.bus.nodes}')
                 print(f'{element_name}:{dss.cktelement.node_order}')
@@ -192,9 +214,9 @@ class SmartRT:
                 dss.circuit.set_active_element(branch_name_2)
                 dss.circuit.set_active_bus(dss.cktelement.bus_names[1])
                 if dss.bus.name in pontos_med:
-                    print('trasformador localizado')
+                    print(f'Trasformador localizado')
                     print(f'Linha:{dss.cktelement.name}, bus:{dss.bus.name}, Nodes:{dss.bus.nodes}')
-                    print(f'{element_name}:{dss.cktelement.node_order}')
+                    print(f'{element_name}:{tr_nodes}')
                     print(f'-'*50)
             dss.transformers.next()
         print('....')
@@ -318,8 +340,13 @@ class SmartRT:
 
         self._transformer_kv_map = tr_map
 
-
     def _set_pesos(self, patamar_rows):
+        """
+        Armazena no objeto Pesos o histórico dos valores enviados para o biblioteca de setup dinâmico
+        (taps, tensões dos pontos de medição e tensões de referencia do regulador)
+        :param patamar_rows:
+        :return:
+        """
         # patamar_rows: lista de dicts contendo as tensões do patamar atual
         if isinstance(patamar_rows, pd.DataFrame):
             df_patamar_voltage = patamar_rows.copy()
@@ -372,6 +399,7 @@ class SmartRT:
                     self.dss.transformers.name = self.reg_manual[index].transformer
                     bus_reg_trafo = self.dss.cktelement.bus_names[1].split('.')[0]
                     node_reg_trafo = self.dss.cktelement.bus_names[1].split('.')[1]
+                    self.dss.circuit.set_active_bus(bus_reg_trafo)
                     v_base = self.dss.bus.kv_base * 1000
                 else:
                     self.dss.regcontrols.name = reg_name
@@ -424,7 +452,6 @@ class SmartRT:
         # print('Determinacao dos pesos ok. ')
         return pesos
 
-
     def _flush_bus_buffer(self):
         # escreve buffer acumulado em disco e limpa o buffer
         if not self._bus_buffer:
@@ -458,11 +485,11 @@ class SmartRT:
     def solve_circuit(self):
         total_number = self.total_patamar
         ini_tentativa = 1               # valor inicial para o loadmult
-        max_tentativa = 5               # numero de tentativas apos não covergência
+        max_tentativa = 6               # numero de tentativas apos não covergência
         patamar_ini = self.patamar_ini
         patamar_fim = self.patamar_fim
 
-        # start with a fresh output file for incremental writes
+        # inicialização dos arquivos de saida para uso incremental
         if os.path.exists(self.path_result_bus):
             try:
                 os.remove(self.path_result_bus)
@@ -473,6 +500,8 @@ class SmartRT:
                 os.remove(self.path_result_pesos)
             except OSError:
                 pass
+
+        self.loadmult_ini = self.dss.solution.load_mult
 
         for number in range(patamar_ini, patamar_fim + 1):
             hour =  self.dss.solution.hour
@@ -488,20 +517,25 @@ class SmartRT:
                 except FileNotFoundError:
                     print(f"Error: The file '{file_exp}' was not found.\n")
 
+
             self.dss.solution.solve()
             status = self.dss.solution.converged
             if status == 0:
                 print(f'OpenDSS: File {self.dss_file} not solved to time {number}!')
+                logging.info(f'OpenDSS: File {self.dss_file} NOT SOLVED. '
+                             f'Set number: {number}, hour: {hour}, seconds: {sec}, event: {self.dss.solution.event_log}')
+
+                # Instancia o gerador
+                sequencia = gerador_positivo_negativo()
                 # tentar novamente com loadmult
-                for tentativa in range(ini_tentativa, max_tentativa+ini_tentativa):
-                    new_load_mult = 1 + tentativa/100
+                for tentativa in range(ini_tentativa, max_tentativa + ini_tentativa):
+                    #new_load_mult = self.loadmult_ini + tentativa / 100
+                    new_load_mult = self.loadmult_ini + next(sequencia) / 100
                     self.dss.text(f"set loadmult={new_load_mult}")
                     self.dss.text(f"set time = ({hour}, {sec})")
                     print(f"Patamar:{number}, hour: {hour}, seconds: {sec}")
-                    self.__check_kv_base()
-                    self.dss.solution.solve()
-                    self.dss.text(f"set loadmult=1.0")
 
+                    self.dss.solution.solve()
                     status = self.dss.solution.converged
                     if status == 0:
                         print(f'OpenDSS: File {self.dss_file} alter loadMult {new_load_mult} and not solved to time {number}!')
@@ -512,6 +546,8 @@ class SmartRT:
                         print(f'OpenDSS: File {self.dss_file} alter loadMult {new_load_mult} and solved to time {number}!')
                         logging.info(f'OpenDSS: File {self.dss_file} SOLVED alter loadMult {new_load_mult} '
                             f'Set number: {number}, hour: {hour}, seconds: {sec}, event: {self.dss.solution.event_log}')
+
+                        self.dss.text(f"set loadmult={self.loadmult_ini}")
                         self.__check_kv_base()
                         break
 
@@ -615,37 +651,39 @@ class SmartRT:
                 )
 
 
-
         # flush any remaining buffered rows
         self._flush_bus_buffer()
         self._flush_pesos_buffer()
 
         # Do not load the full voltage_bus.csv into memory to save RAM.
         # The incremental CSV remains on disk at self.path_result_bus for post-processing.
+
         self.all_bus_kv = None
 
+        self.dss.text("Export Monitors all")
 
-if __name__ == '__main__':
+def main():
+
     application_path = os.path.dirname(os.path.abspath(__file__))
 
-    circuito = 'RMTQ1302'
-    dss_file = os.path.join(application_path, fr'cenarios\{circuito}_TSEA\DU_7_Master_391_MTQ_RMTQ1302_17280_TSEA.dss')
+    #circuito = 'RMTQ1302'
+    #dss_file = os.path.join(application_path, fr'cenarios\{circuito}_TSEA\DU_7_Master_391_MTQ_RMTQ1302_17280_TSEA.dss')
 
-    circuito = 'RAVP1303'
-    dss_file = os.path.join(application_path, fr'cenarios\{circuito}_BASE\DU_7_Master_391_AVP_RAVP1303_17280.dss')
+    #circuito = 'RAVP1303'
+    #dss_file = os.path.join(application_path, fr'cenarios\{circuito}_BASE\DU_7_Master_391_AVP_RAVP1303_17280.dss')
 
-    circuito = 'RBOI1302'
-    dss_file = os.path.join(application_path, fr'cenarios\{circuito}_BASE\DU_7_Master_391_BOI_RBOI1302_BASE_17280.dss')
+    #circuito = 'RBOI1302'
+    #dss_file = os.path.join(application_path, fr'cenarios\{circuito}_BASE\DU_7_Master_391_BOI_RBOI1302_BASE_17280.dss')
 
-    circuito = 'RAVP1305'
-    dss_file = os.path.join(application_path, fr'cenarios\{circuito}_BASE\DU_7_Master_391_AVP_RAVP1305_BASE_17280.dss')
+    #circuito = 'RAVP1305'
+    #dss_file = os.path.join(application_path, fr'cenarios\{circuito}_BASE\DU_7_Master_391_AVP_RAVP1305_BASE_17280.dss')
 
-    circuito = 'RMTQ1302'
-    dss_file = os.path.join(application_path, fr'cenarios\{circuito}_C-MOD_G-AGR\DU_7_Master_391_MTQ_RMTQ1302_C-MOD_G-AGR_17280.dss')
+    #circuito = 'RMTQ1302'
+    #dss_file = os.path.join(application_path, fr'cenarios\{circuito}_C-MOD_G-AGR\DU_7_Master_391_MTQ_RMTQ1302_C-MOD_G-AGR_17280.dss')
 
+    circuito = 'RBRR1301'
+    dss_file = os.path.join(application_path, fr'cenarios\{circuito}_BASE\DU_7_Master_391_BRR_RBRR1301_BASE_17280.dss')
 
-    #circuito = 'RBRR1301'
-    #dss_file = os.path.join(application_path, fr'cenarios\{circuito}_BASE\DU_7_Master_391_BRR_RBRR1301_BASE_17280.dss')
 
 
     # Os pontos de medição devem ser da mesma fase.
@@ -664,7 +702,7 @@ if __name__ == '__main__':
 
 
     num_patamatares = 17280             # numero total de patamares da simulação
-    patamar_ini = 1                 # 3600   # numero de patamares - converter a hora de inicio da simulação em patamares
+    patamar_ini = 0                 # 3600   # numero de patamares - converter a hora de inicio da simulação em patamares
     patamar_fim = 17280             # 5000   # converter a hora de fim da simulação em patamares
 
 
@@ -685,9 +723,12 @@ if __name__ == '__main__':
                     regcontrolname= reguladores,
                     patamar_ini=patamar_ini,
                     patamar_fim=patamar_fim,
-                    usar_setup_dinamico = False)
+                    usar_setup_dinamico = True)
 
     #simul.regcontrol_tsea_init()
     simul.solve_circuit()
 
     print(f"Processo concluído em {time.time() - proc_time_ini}")
+
+if __name__ == '__main__':
+    main()
