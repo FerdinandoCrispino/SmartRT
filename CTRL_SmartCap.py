@@ -429,28 +429,31 @@ class SmartRT:
         cap_rows = []
         cap_dados_rows = []
         vmag = []
-        cap = kvar = kv_base = ctrl_mode = current_steps = available_steps = ""
-        pt_ratio = ct_ratio = ctrl_on = ctrl_off = ""
-        delay = delay_off = dead_time = ""
+        cap = kvar = kv_base = ctrl_mode = current_steps = available_steps = 0
+        pt_ratio = ct_ratio = ctrl_on = ctrl_off = 0
+        delay = delay_off = dead_time = 0
 
         for ctrl_cap in self.dss.capcontrols.names:
-            self.dss.capcontrols.name = ctrl_cap        # ativa o controle do apacitor
+            self.dss.capcontrols.name = ctrl_cap        # ativa controle do apacitor
 
             delay = self.dss.capcontrols.delay
             delay_off = self.dss.capcontrols.delay_off
             dead_time = self.dss.capcontrols.dead_time
-            self.dss.capcontrols
 
-            ctrl_bus = self.dss.cktelement.bus_names
+            ctrl_cap = self.dss.capcontrols.controlled_capacitor
             ctrl_mode = self.dss.capcontrols.mode
             if ctrl_mode == 1:
                 pt_ratio = self.dss.capcontrols.pt_ratio
                 ctrl_on = self.dss.capcontrols.on_setting
                 ctrl_off = self.dss.capcontrols.off_setting
-            for cap in self.dss.capacitors.names:
-               if ctrl_bus == self.dss.cktelement.bus_names:
-                    self.dss.capacitors.name = cap      # ativa o capacitor
 
+
+            for cap in self.dss.capacitors.names:
+                if ctrl_cap == cap:
+                    nome_cap = cap
+                    self.dss.capacitors.name = nome_cap      # ativa o capacitor
+
+                    ctrl_bus = self.dss.cktelement.bus_names
                     current_steps = self.dss.capacitors.states[0]
                     available_steps = self.dss.capacitors.available_steps
                     kvar = self.dss.capacitors.kvar
@@ -463,16 +466,15 @@ class SmartRT:
                         except IndexError:
                             print('')
 
-            cap_dados_rows.append({"cenario_id": self.cenario_id, "circuito": self.circuito, "nome": cap,"patamar": number, "step": current_steps,
-                                   "vmag_1": vmag[0], "vmag_2": vmag[1], "vmag_3": vmag[2],
-                                   "available_steps": available_steps,})
+                    cap_dados_rows.append({"cenario_id": self.cenario_id, "circuito": self.circuito, "nome": nome_cap,
+                                           "patamar": number, "step": current_steps,
+                                           "vmag_1": vmag[0], "vmag_2": vmag[1], "vmag_3": vmag[2],
+                                           "available_steps": available_steps,})
 
-
-        cap_rows.append({"cenario_id": self.cenario_id, "circuito": self.circuito, "nome": cap, "kvar": kvar,
+            cap_rows.append({"cenario_id": self.cenario_id, "circuito": self.circuito, "nome": nome_cap, "kvar": kvar,
                          "ctrl_mode": ctrl_mode, "pt_ratio": pt_ratio, "ct_ratio": ct_ratio, "ctrl_on": ctrl_on,
-                         "ctrl_off": ctrl_off,  "delay": delay, "delay_off": delay_off, "dead_time": dead_time,
-                         "kv_base": kv_base, "circuito": self.circuito})
-
+                         "ctrl_off": ctrl_off, "delay": delay, "delay_off": delay_off, "dead_time": dead_time,
+                         "kv_base": kv_base})
 
         if number == 0:
             self.__save_results_db("equipamento", cap_rows)
