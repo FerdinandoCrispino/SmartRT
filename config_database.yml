@@ -98,6 +98,27 @@ databases:
         dist: '391'
         dist_name: 'EDP_SP_2024'
         dss_files_folder: '~\dss\2024' # diretório dos arquivos do openDSS (user folder)
+    '63_2024':
+        server: 'DaimonEng'
+        database: 'GEO_SIGR_PERDAS_CPFL_PAULISTA'
+        username: 'usr_GeoPerdas'
+        password: '123456'
+        schema: 'SDE'
+        dbf_directory: ''
+        gdb_directory: 'D:\State_Grid\CPFL_PAULISTA\BDGD'
+        gdb_file: 'CPFL_Paulista_63_2024-12-31_V11_20250731-1036.gdb'
+        data_base: "2024-12-31"
+        cod_BDGD: '35'
+        dist: '63'
+        dist_name: 'CPFL_PAULISTA_2024'
+        dss_files_folder: '~\dss\2024' # diretório dos arquivos do openDSS (user folder)
+    'resultsDB':
+        server: 'DaimonEng'
+        database: 'resultsDB'
+        username: 'usr_GeoPerdas'
+        password: '123456'
+        schema: 'SDE'
+
     'Irradiance':
         server: 'localhost'
         database: 'IRRADIANCIA'

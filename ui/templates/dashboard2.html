@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Analise de Fluxo de Potencia - Distribuicao</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+  :root{
+    --bg: #0d1117;
+    --panel: #151b23;
+    --panel-2: #1c2530;
+    --border: #2a3542;
+    --ink: #e6edf3;
+    --ink-dim: #8b98a5;
+    --accent: #4fd1c5;
+    --accent-2: #f0a84e;
+    --danger: #ef6a6a;
+    --ok: #4fd1c5;
+    --sans: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+    --mono: 'IBM Plex Mono', 'Courier New', monospace;
+  }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:var(--sans); -webkit-font-smoothing:antialiased;
+  }
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:18px 32px; border-bottom:1px solid var(--border);
+    flex-wrap:wrap; gap:12px;
+  }
+  .topbar h1{
+    font-size:14px; letter-spacing:.12em; text-transform:uppercase;
+    font-weight:600; color:var(--ink-dim); margin:0;
+  }
+  .topbar h1 span{ color:var(--accent); }
+  .status{
+    font-family:var(--mono); font-size:11px; color:var(--ink-dim);
+    display:flex; align-items:center; gap:8px;
+  }
+  .dot{ width:7px; height:7px; border-radius:50%; background:var(--accent); box-shadow:0 0 8px var(--accent); }
+
+  .filtros{
+    display:flex; gap:14px; padding:16px 32px; border-bottom:1px solid var(--border);
+    flex-wrap:wrap; align-items:flex-end; background:var(--panel);
+  }
+  .campo{ display:flex; flex-direction:column; gap:6px; min-width:220px; }
+  .campo label{ font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-dim); }
+  select{
+    background:var(--panel-2); color:var(--ink); border:1px solid var(--border);
+    border-radius:6px; padding:8px 10px; font-family:var(--sans); font-size:13px;
+  }
+  select[multiple]{ min-height:84px; }
+  .hint{ font-size:11px; color:var(--ink-dim); max-width:260px; }
+
+  .wrap{ padding:24px 32px 60px; max-width:2000px; margin:0 auto; }
+
+  .grid{ display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px; }
+  .grid-3{ display:grid; grid-template-columns:2fr 1fr; gap:16px; margin-bottom:16px; }
+  .full{ grid-column: 1 / -1; }
+
+  .panel{
+    background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:18px 10px;
+  }
+  .panel h2{
+    font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-dim);
+    margin:0 0 4px; font-weight:600;
+  }
+  .panel .sub{ font-size:11px; color:var(--ink-dim); margin-bottom:10px; }
+  .plot{ width:100%; height:320px; }
+  .plot.tall{ height:380px; }
+  .msg-vazio{ color:var(--ink-dim); font-size:12px; font-family:var(--mono); padding:20px 0; text-align:center; }
+  .erro{ color:var(--danger); font-family:var(--mono); font-size:12px; padding:20px 0; text-align:center; }
+
+  .slider {
+      //-webkit-appearance: none;
+      width: 85%;
+      height: 12px;
+      //background: #d3d3d3;
+      //outline: none;
+      opacity: 0.9;
+      -webkit-transition: .2s;
+      transition: opacity .2s;
+  }
+
+  @media (max-width: 980px){
+    .grid, .grid-3{ grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>Fluxo de Potencia<span> · </span>Circuitos de Distribuicao</h1>
+  <div class="status"><span class="dot"></span> Fonte: SQL Server via SQLAlchemy</div>
+</div>
+
+<div class="filtros">
+  <div class="campo">
+    <label for="sel-circuito">Circuito</label>
+    <select id="sel-circuito"></select>
+  </div>
+  <div class="campo">
+    <label for="sel-cenario">Cenario (graficos individuais)</label>
+    <select id="sel-cenario"></select>
+  </div>
+  <div class="campo" style="min-width:280px;">
+    <label for="sel-cenarios-comp">Cenarios para comparacao (radar)</label>
+    <select id="sel-cenarios-comp" multiple></select>
+  </div>
+  <div class="hint">Segure Ctrl/Cmd para selecionar mais de um cenario na comparacao.</div>
+</div>
+
+<div class="wrap">
+
+  <div class="grid">
+    <div class="panel">
+      <h2>Potencia Ativa e Reativa</h2>
+      <div class="sub">Curva de demanda ao longo do dia (24h) no início do circuito</div>
+      <div id="plot-potencia" class="plot"></div>
+    </div>
+    <div class="panel">
+      <h2>Perdas Elétricas</h2>
+      <div class="sub">Perdas totais do circuito ao longo do dia (kW)</div>
+      <div id="plot-perdas" class="plot"></div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <h2>Perfil de Tensao</h2>
+      <div class="sub">Tensao (p.u.) por barra, ao longo do alimentador, no horário: <span id="text_perfil_tensao">{{horario_referencia}}</span> horas.</div>
+      <div id="plot-perfil-tensao" class="plot tall"></div>
+      <div class="slidecontainer">
+          <input type="range" min=0 max=23 value={{horario_referencia}} class="slider" id="myRange" oninput="getdataperfil()" width="100%">
+          <input type="checkbox" id="MTBT" name="MTBT" value="0" checked>
+          <label class="sub" for="MTBT"> Somente MT</label><br>
+            <p class="sub">Hour: <span id="hour">1</span></p>
+        </div>
+
+    </div>
+    <div class="panel">
+      <h2>Fator de Potência</h2>
+      <div class="sub">Fator de potência no início do alimentador</div>
+      <div id="plot-fator_potencia" class="plot tall"></div>
+    </div>
+  </div>
+
+  <div class="grid-3">
+    <div class="panel">
+      <h2>Comparacao entre Cenarios</h2>
+      <div class="sub">Metricas normalizadas (0-1) para o circuito selecionado</div>
+      <div id="plot-radar" class="plot tall"></div>
+    </div>
+    <div class="panel">
+      <h2>Legenda das Metricas</h2>
+      <div class="sub">Valores absolutos por cenario comparado</div>
+      <div id="tabela-radar" style="font-size:12px; overflow:auto; max-height:380px;"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+
+const CORES = { ativa_1: '#4f6bd1', ativa_2: '#d14f4f', ativa_3: 'rgb(220 174 73 / 0.91)',
+  reativa_1: '#4eb2f0', reativa_2: 'rgb(240 78 78 / 0.66)', reativa_3: 'rgb(246 227 186 / 0.74)',
+  perdas_ativa: '#87ef6a', perdas_reativa: '#efc06a',
+  abaixo: '#ef3434', acima: '#f04e4e' };
+
+const LIMITE_INFERIOR = {{ limite_inferior }};
+const LIMITE_SUPERIOR = {{ limite_superior }};
+let horario_referencia = {{ horario_referencia }};
+
+var slider = document.getElementById("myRange");
+var hour = document.getElementById("hour");
+hour.innerHTML = slider.value;
+horario_referencia = slider.value;
+
+
+
+function getdataperfil() {
+    var slider = document.getElementById("myRange");
+    var hour = document.getElementById("hour");
+    hour.innerHTML = slider.value;
+    document.getElementById("text_perfil_tensao").innerHTML = slider.value;
+    const circuitoId = document.getElementById('sel-circuito').value;
+    const cenarioId = document.getElementById('sel-cenario').value;
+    const mtbt = document.getElementById('MTBT').checked;
+    //console.log(typeof mtbt && mtbt);
+    var tipo;
+    if (mtbt === true) {
+      tipo = 0;
+    } else {
+      tipo = 2;
+    }
+    //console.log( tipo);
+    carregarPerfilTensao(cenarioId, circuitoId, slider.value, tipo);
+}
+
+// setInterval(function () {
+//   if (slider.value === slider.max){
+//      slider.value = 0;
+//      document.getElementById("text_perfil_tensao").innerHTML = slider.value;
+//      hour.innerHTML = slider.value;
+//   }else {
+//      slider.value = parseInt(slider.value) + 1;
+//      getdataperfil();
+//   }
+//   console.log(slider.value)}, 6000);
+
+const layoutBase = {
+  paper_bgcolor: 'transparent',
+  plot_bgcolor: 'transparent',
+  font: { color: '#e6edf3', family: 'IBM Plex Sans, system-ui, sans-serif', size: 11 },
+  margin: { l: 55, r: 20, t: 10, b: 45 },
+  legend: { orientation: 'h', y: -0.22, font: { size: 10 } },
+  xaxis: { gridcolor: '#2a3542', zerolinecolor: '#2a3542' },
+  yaxis: { gridcolor: '#2a3542', zerolinecolor: '#2a3542' },
+};
+
+const plotConfig = { displayModeBar: false, responsive: true };
+
+function mostrarMensagem(elId, texto, isErro=false) {
+  document.getElementById(elId).innerHTML = `<div class="${isErro ? 'erro' : 'msg-vazio'}">${texto}</div>`;
+}
+
+async function carregarCircuitos() {
+  const r = await fetch('/api/circuitos');
+  const dados = await r.json();
+  const sel = document.getElementById('sel-circuito');
+  const selUnico = document.getElementById('sel-cenario');
+  const selMulti = document.getElementById('sel-cenarios-comp');
+  console.log(dados)
+  if (dados.erro || !dados.length) {
+    sel.innerHTML = '<option value="">Nenhum circuito encontrado</option>';
+    selUnico.innerHTML = '<option value="">Sem cenarios</option>';
+    selMulti.innerHTML = '';
+    return;
+  }
+
+  const circuitos_unico = [...new Map(dados.map(item =>  [item['circuito'], item])).values()];
+
+  //sel.innerHTML = circuitos_unico.map(c => `<option value="${c.circuito}">${c.circuito}${c.cenario_id ? ' (' + c.cenario_id + ')' : ''}</option>`).join('');
+  sel.innerHTML = circuitos_unico.map(c => `<option value="${c.circuito}">${c.circuito}</option>`).join('');
+
+  const cenario_unico = [...new Map(dados.map(item =>  [item['cenario_id'], item])).values()];
+
+  selUnico.innerHTML = cenario_unico.map(c => `<option value="${c.cenario_id}">${c.cenario}</option>`).join('');
+  selMulti.innerHTML = cenario_unico.map(c => `<option value="${c.cenario_id}">${c.cenario}</option>`).join('');
+  // seleciona todos os cenarios por padrao na comparacao
+  Array.from(selMulti.options).forEach(o => o.selected = true);
+}
+
+async function carregarPotenciaPerdas(cenarioId, circuitoId) {
+  try {
+    const r = await fetch(`/api/potencia-perdas?cenario_id=${cenarioId}&circuito_id=${circuitoId}`);
+    const d = await r.json();
+    console.log(d)
+    if (d.erro) throw new Error(d.erro);
+    if (!d) { mostrarMensagem('plot-potencia', 'Sem dados para este cenario/circuito.'); mostrarMensagem('plot-perdas', 'Sem dados para este cenario/circuito.'); return; }
+
+    Plotly.newPlot('plot-potencia', [
+      { x: d.patamar, y: d.p1, type: 'scatter', mode: 'lines', name: 'Potencia Ativa - Fase A (kW)', line: { color: CORES.ativa_1, width: 2.5 }, fill: 'tozeroy', fillcolor: 'rgba(79,209,197,0.08)' },
+      { x: d.patamar, y: d.p2, type: 'scatter', mode: 'lines', name: 'Potencia Ativa - Fase B (kW)', line: { color: CORES.ativa_2, width: 2.5 } },
+      { x: d.patamar, y: d.p3, type: 'scatter', mode: 'lines', name: 'Potencia Ativa - Fase C (kW)', line: { color: CORES.ativa_3, width: 2.5 }, fill: 'tozeroy', fillcolor: 'rgba(79,209,197,0.08)' },
+      { x: d.patamar, y: d.q1, type: 'scatter', mode: 'lines', name: 'Potencia Reativa - Fase A (kVAr)', line: { color: CORES.reativa_1, width: 2.5 } },
+      { x: d.patamar, y: d.q2, type: 'scatter', mode: 'lines', name: 'Potencia Reativa - Fase B (kVAr)', line: { color: CORES.reativa_2, width: 2.5 }, fill: 'tozeroy', fillcolor: 'rgba(79,209,197,0.08)' },
+      { x: d.patamar, y: d.q3, type: 'scatter', mode: 'lines', name: 'Potencia Reativa - Fase C (kVAr)', line: { color: CORES.reativa_3, width: 2.5 } },
+
+    ], { ...layoutBase, xaxis: { ...layoutBase.xaxis, title: 'Hora', dtick: 2 }, yaxis: { ...layoutBase.yaxis, title: 'kW / kVAr' } }, plotConfig);
+
+
+    Plotly.newPlot('plot-perdas', [
+      { x: d.patamar, y: d.p_losses, type: 'scatter', mode: 'lines', name: 'Perda Ativa (kW)', line: { color: CORES.perdas_ativa, width: 2.5 }, fill: 'tozeroy', fillcolor: 'rgba(239,106,106,0.10)' },
+      { x: d.patamar, y: d.q_losses, type: 'scatter', mode: 'lines', name: 'Perda Reativa (kVAr)', line: { color: CORES.perdas_reativa, width: 2.5 }, fill: 'tozeroy', fillcolor: 'rgba(239,106,106,0.10)' },
+
+    ], { ...layoutBase, xaxis: { ...layoutBase.xaxis, title: 'Hora', dtick: 2 }, yaxis: { ...layoutBase.yaxis, title: 'kW / kVAr' } }, plotConfig);
+
+
+    Plotly.newPlot('plot-fator_potencia', [
+      { x: d.patamar, y: d.fp1, type: 'scatter', mode: 'lines', name: 'Fator de Potência Fase A', line: { color: CORES.ativa_1, width: 2.5 } },
+      { x: d.patamar, y: d.fp2, type: 'scatter', mode: 'lines', name: 'Fator de Potência Fase B', line: { color: CORES.ativa_2, width: 2.5 } },
+      { x: d.patamar, y: d.fp3, type: 'scatter', mode: 'lines', name: 'Fator de Potência Fase C', line: { color: CORES.ativa_3, width: 2.5 } },
+
+      { x: d.patamar, y: d.fp_tri, type: 'scatter', mode: 'lines', name: 'Fator de Potência 3&#934;', visible: 'legendonly', line: { color: CORES.reativa_3, width: 4 } },
+
+    ], { ...layoutBase, xaxis: { ...layoutBase.xaxis, title: 'Hora', dtick: 2 }, yaxis: { ...layoutBase.yaxis, title: 'FP' } }, plotConfig);
+
+
+  } catch (e) {
+    console.log(e)
+    mostrarMensagem('plot-potencia', e.message, true);
+    mostrarMensagem('plot-perdas', e.message, true);
+  }
+}
+
+async function carregarPerfilTensao(cenarioId, circuitoId, hora, tipo) {
+  //document.documentElement.style.cursor = 'wait';
+  document.body.style.cursor = 'wait';
+  await new Promise(resolve => setTimeout(resolve, 50));
+  // console.log(document.body.style.cursor);
+  // console.log(getComputedStyle(document.body).cursor);
+
+  try {
+    const r = await fetch(`/api/perfil-tensao?cenario_id=${cenarioId}&circuito_id=${circuitoId}&horas=${hora}&tipo=${tipo}`);
+    const d = await r.json();
+    if (d.erro) throw new Error(d.erro);
+    if (!d) { mostrarMensagem('plot-perfil-tensao', 'Sem dados de tensao para este cenario/circuito.'); return; }
+    //console.log(d.distancia1)
+
+    const colors = ['blue', 'red', 'yellow'];
+    // Plotly usa strings para dash: 'solid', 'dot', 'dash'
+    const linetypes = ['solid', 'dot', 'dot', 'dash']; // equivalente a '-', ':', ':', '--'
+    const fases = ['Fase A', 'Fase B', 'Fase C']
+    const Voltage_tipo = ['MT', '', 'BT']
+    const traces = [];
+    const legendShown = {};
+
+    for (const i in d.distancia1) {
+      const x1 = d.distancia1[i];
+      const x2 = d.distancia2[i];
+      const y1 = d.v1[i];
+      const y2 = d.v2[i];
+      const idcolor = d.node[i];
+      const idtipo = d.tipo[i];
+
+      const grupo = String(d.node[i] + d.tipo[i] );
+      console.log (grupo);
+      traces.push({
+          x: [x1, x2],
+          y: [y1, y2],
+          mode: 'lines',
+          type: 'scatter',
+          line: {
+              color: colors[idcolor-1],
+              dash: linetypes[idtipo],
+              width: d.tipo[i] === 2 ? 0.5 : 1.5
+          },
+        legendgroup: grupo,
+        name: `${Voltage_tipo[idtipo]} - ${fases[idcolor-1]}`,
+        showlegend: !legendShown[grupo]
+      });
+      legendShown[grupo] = true;
+    }
+
+    // const layout = {
+    //   title: { text: 'Perfil de Tensão', font: { size: 14 } },
+    //   xaxis: {
+    //       title: 'Distância (km)',
+    //       rangemode: 'tozero'
+    //   },
+    //   yaxis: {
+    //       title: 'Tensão (pu)',
+    //       //range: [0.85, 1.06]
+    //   },
+    //   showlegend: false
+    // };
+
+    const layout = { ...layoutBase, xaxis: { ...layoutBase.xaxis, title: 'Distância (km)', dtick: 2 }, yaxis: { ...layoutBase.yaxis, title: 'Tensão (pu)' } };
+
+
+    Plotly.newPlot('plot-perfil-tensao', traces, layout, plotConfig);
+
+  } catch (e) {
+    mostrarMensagem('plot-perfil-tensao', e.message, true);
+  }
+  document.body.style.cursor = 'default';
+}
+
+async function carregarViolacoes(cenarioId, circuitoId) {
+  try {
+    const r = await fetch(`/api/violacoes-tensao?cenario_id=${cenarioId}&circuito_id=${circuitoId}`);
+    const d = await r.json();
+    if (d.erro) throw new Error(d.erro);
+    if (!d.barras.length) { mostrarMensagem('plot-violacoes', 'Nenhuma violacao de tensao encontrada neste cenario/circuito.'); return; }
+
+    Plotly.newPlot('plot-violacoes', [
+      { x: d.barras, y: d.violacoes_abaixo, type: 'bar', name: 'Abaixo do limite', marker: { color: CORES.abaixo } },
+      { x: d.barras, y: d.violacoes_acima, type: 'bar', name: 'Acima do limite', marker: { color: CORES.acima } },
+    ], {
+      ...layoutBase, barmode: 'stack',
+      xaxis: { ...layoutBase.xaxis, title: 'Barra', tickangle: -45 },
+      yaxis: { ...layoutBase.yaxis, title: 'Horas em violacao' },
+    }, plotConfig);
+  } catch (e) {
+    mostrarMensagem('plot-violacoes', e.message, true);
+  }
+}
+
+async function carregarRadar(circuitoId, cenarioIds) {
+  try {
+    if (!cenarioIds.length) { mostrarMensagem('plot-radar', 'Selecione ao menos um cenario para comparar.'); document.getElementById('tabela-radar').innerHTML = ''; return; }
+
+    const r = await fetch(`/api/comparacao-cenarios?circuito_id=${circuitoId}&cenarios=${cenarioIds.join(',')}`);
+    const d = await r.json();
+    if (d.erro) throw new Error(d.erro);
+    if (!d.series.length) { mostrarMensagem('plot-radar', 'Sem dados para os cenarios selecionados.'); return; }
+
+    const paleta = ['#4fd1c5', '#f0a84e', '#ef6a6a', '#7aa7ff', '#c98bf0', '#9acd6a'];
+    const traces = d.series.map((s, i) => ({
+      type: 'scatterpolar',
+      r: [...s.valores_normalizados, s.valores_normalizados[0]],
+      theta: [...d.metricas, d.metricas[0]],
+      fill: 'toself',
+      name: s.cenario,
+      line: { color: paleta[i % paleta.length] },
+      opacity: 0.75,
+    }));
+
+    Plotly.newPlot('plot-radar', traces, {
+      ...layoutBase,
+      polar: {
+        bgcolor: 'transparent',
+        radialaxis: { visible: true, range: [0, 1], gridcolor: '#2a3542', color: '#8b98a5' },
+        angularaxis: { gridcolor: '#2a3542', color: '#e6edf3' },
+      },
+      showlegend: true,
+    }, plotConfig);
+
+    const tabela = document.getElementById('tabela-radar');
+    let html = '<table style="width:100%; border-collapse:collapse;"><thead><tr><th style="text-align:left; padding:6px; color:#8b98a5; border-bottom:1px solid #2a3542;">Metrica</th>';
+    d.series.forEach(s => { html += `<th style="text-align:right; padding:6px; color:#8b98a5; border-bottom:1px solid #2a3542;">${s.cenario}</th>`; });
+    html += '</tr></thead><tbody>';
+    d.metricas.forEach((m, i) => {
+      html += `<tr><td style="padding:6px; border-bottom:1px solid #2a3542;">${m}</td>`;
+      d.series.forEach(s => { html += `<td style="text-align:right; padding:6px; border-bottom:1px solid #2a3542; font-family:'IBM Plex Mono', monospace;">${s.valores[i].toLocaleString('pt-BR', { maximumFractionDigits: 3 })}</td>`; });
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    tabela.innerHTML = html;
+  } catch (e) {
+    mostrarMensagem('plot-radar', e.message, true);
+  }
+}
+
+async function atualizarTudo() {
+  const circuitoId = document.getElementById('sel-circuito').value;
+  const cenarioId = document.getElementById('sel-cenario').value;
+  const cenariosComp = Array.from(document.getElementById('sel-cenarios-comp').selectedOptions).map(o => o.value);
+  //console.log(circuitoId)
+  //console.log(cenarioId)
+  if (!circuitoId || !cenarioId) return;
+
+  carregarPotenciaPerdas(cenarioId, circuitoId);
+  carregarPerfilTensao(cenarioId, circuitoId, slider.value, 0);
+  carregarViolacoes(cenarioId, circuitoId);
+  carregarRadar(circuitoId, cenariosComp);
+}
+
+document.getElementById('sel-circuito').addEventListener('change', async (e) => {
+  //await carregarCenarios(e.target.value);
+  atualizarTudo();
+});
+document.getElementById('sel-cenario').addEventListener('change', atualizarTudo);
+document.getElementById('sel-cenarios-comp').addEventListener('change', atualizarTudo);
+
+(async function init() {
+  await carregarCircuitos();
+  const primeiroCircuito = document.getElementById('sel-circuito').value;
+  // console.log('primeiroCircuito')
+  // console.log(primeiroCircuito)
+  if (primeiroCircuito) {
+    //await carregarCenarios(primeiroCircuito);
+    document.body.style.cursor = 'wait';  // Cursor de espera
+    atualizarTudo();
+    document.body.style.cursor = 'default';  // Cursor normal
+  }
+})();
+</script>
+
+</body>
+</html>

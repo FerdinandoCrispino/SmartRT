@@ -508,7 +508,7 @@ class SmartRT:
             sec = self.dss.solution.seconds
 
             print(f"Patamar:{number}, hour: {hour}, seconds: {sec}")
-            if hour in (1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23) and sec == 0:
+            if hour in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23) and sec == 0:
                 self.dss.text("Export Profile Phases=All")
                 path_dss = os.path.dirname(self.dss_file)
                 file_exp = os.path.join(path_dss, fr'{self.circuit}_EXP_Profile.CSV')

@@ -1,0 +1,64 @@
+# Arquivo de configurações para o script CTRL_SmartCap.py
+
+cenario_id:
+  - '10'
+  - '11'
+  - '10'
+  - '11'
+  - '10'
+  - '11'
+  - '10'
+  - '11'
+cenario_desc:
+  - 'Caso base'
+  - 'Sem Capacitores'
+  - 'Caso base'
+  - 'Sem Capacitores'
+  - 'Caso base'
+  - 'Sem Capacitores'
+  - 'Caso base'
+  - 'Sem Capacitores'
+  - 'Controle por tensao'
+  - 'Controle por FP'
+  - 'Controle por kVAr'
+  - 'Controle por corrente'
+  - 'reducao de potencia do capacitor'
+sub:
+  - 'ABR'
+  - 'ABR'
+  - 'ABR'
+  - 'ABR'
+  - 'ABR'
+  - 'ABR'
+  - 'AER'
+  - 'AER'
+feeder_path:
+  - 'C:\Users\Daimon\dss\2024\63'
+feeder:
+  - 'ABR08'
+  - 'ABR08'
+  - 'ABR09'
+  - 'ABR09'
+  - 'ABR11'
+  - 'ABR11'
+  - 'AER03'
+  - 'AER03'
+ABR08:
+  CAPcontrol:
+    - 'CREG_175RT005041559C'
+    - 'CREG_175RT005041559B'
+    - 'CREG_175RT005041559A'
+ABR09:
+  CAPcontrol:
+    - 'CREG_175RT005041559C'
+    - 'CREG_175RT005041559B'
+    - 'CREG_175RT005041559A'
+
+dist: 63
+month: 7          #[1, 7]
+type_day: 'DU'    #['DU', 'DO']
+num_patamares: 24
+patamar_ini: 0
+patamar_fim: 24
+multiprocess: False
+db_results: 'resultsDB'
