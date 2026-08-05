@@ -1,5 +1,4 @@
 import enum
-
 import pandas as pd
 import yaml
 import os
@@ -20,21 +19,25 @@ class TIPO_BARRA(enum.Enum):
 tabelas = ['linha','circuito', 'barra', 'analise', 'capacitor', 'equipamento']
 
 analise_table = Table('analise', metadata,
-                      Column('analise_id', Integer, primary_key=True),
-                      Column('cenario', String(50)),
+                      Column('analise', Integer, primary_key=True),
                       Column('cenario_id', Integer, nullable=False),
+                      Column('cenario', String(30)),
                       Column('empresa', String(30)),
                       Column('sub', String(30)),
                       Column('circuito', String(30), nullable=False),
+                      Column('controle_id', Integer, nullable=False),
+                      Column('controle', String(30)),
                       Column('data', DateTime),
                       Column('patamar_ini', Integer),
                       Column('patamar_fim', Integer),
-                      Column('desc', String(250)),
                       )
 circuito_table = Table('circuito', metadata,
                        Column('cenario_id', Integer),
                        Column('circuito', String(90)),
+                       Column('controle_id', String(30)),
                        Column('patamar', Integer),
+                       Column('hora', Integer),
+                       Column('seg', Integer),
                        Column('p1', Float),
                        Column('p2', Float),
                        Column('p3', Float),
@@ -47,20 +50,28 @@ circuito_table = Table('circuito', metadata,
 barra_table = Table('barra', metadata,
                     Column('cenario_id', Integer),
                     Column('circuito', String(90)),
-                    Column('bus', String(90)),
+                    Column('controle_id', String(30)),
                     Column('patamar', Integer),
+                    Column('hora', Integer),
+                    Column('seg', Integer),
+                    Column('bus', String(90)),
                     Column('node', Integer),
-                    Column('tipo', Enum(TIPO_BARRA)),
                     Column('vln_pu', Float),
-                    Column('kv_base', Float),
+                    Column('v_base', Float),
+                    Column('tipo', Enum(TIPO_BARRA)),
+                    Column('kw',  Float),
+                    Column('kvar',  Float),
                     Column('fp',  Float),
                     Column('distancia', Float)
                     )
 linha_table = Table('linha', metadata,
                     Column('cenario_id', Integer),
                     Column('circuito', String(90)),
+                    Column('controle_id', String(30)),
                     Column('linha', String(90)),
                     Column('patamar', Integer),
+                    Column('hora', Integer),
+                    Column('seg', Integer),
                     Column('v1', Float),
                     Column('distancia1', Float),
                     Column('v2', Float),
@@ -69,11 +80,11 @@ linha_table = Table('linha', metadata,
                     Column('tipo', Enum(TIPO_BARRA)),
                     )
 equipamento_table = Table('equipamento', metadata,
-                   Column('equipamento_id', Integer, primary_key=True),
                     Column('cenario_id', Integer),
                     Column('circuito', String(90)),
-                    Column( 'nome', String(90)),
-                    Column( 'kvar', Float),
+                    Column('controle', String(30)),
+                    Column('nome', String(90)),
+                    Column('kvar', Float),
                     Column('ctrl_mode', Integer),
                     Column('pt_ratio', Float),
                     Column('ct_ratio', Float),
@@ -87,15 +98,17 @@ equipamento_table = Table('equipamento', metadata,
 capacitor_table = Table ('capacitor' , metadata,
                          Column('cenario_id', Integer),
                          Column('circuito', String(90)),
-                         Column( 'nome', String(90)),
+                         Column('controle_id', String(30)),
+                         Column('nome', String(90)),
                          Column('patamar', Integer),
-                         Column( 'step', Integer),
-                         Column( 'vmag_1', Float),
+                         Column('hora', Integer),
+                         Column('seg', Integer),
+                         Column('step', Integer),
+                         Column('vmag_1', Float),
                          Column('vmag_2', Float),
-                         Column( 'vmag_3', Float),
+                         Column('vmag_3', Float),
                          Column('available_steps', Integer)
                          )
-
 
 def nome_tabelas():
     return tabelas
@@ -125,26 +138,23 @@ def create_connection(config_bdgd):
 
     return engine
 
-def check_cenario_exist(tabelas, circuito, cenario_id):
+def check_cenario_exist(tabelas, feeder, cenario_id):
     conf = load_config()
     engine = create_connection(conf)
 
     for tabela in tabelas:
-        query = f"Select count(*) as cenario from {tabela} where circuito = '{circuito}' and cenario_id = {cenario_id}"
+        query = f"Select count(*) as cenario_id from {tabela} where circuito = '{feeder}' and cenario_id = {cenario_id}"
         with engine.connect() as conn:
             res = pd.read_sql_query(sql=query, con=conn)
-            count_reg = res.iloc[0]['cenario']
+            count_reg = res.iloc[0]['cenario_id']
             if count_reg > 0 :
                 try:
                     # conn.execute(text(f"TRUNCATE TABLE {tabela}"))
-                    conn.execute(text(f"DELETE from {tabela} where circuito = '{circuito}' and cenario_id = {cenario_id} "))
+                    conn.execute(text(f"DELETE from {tabela} where circuito = '{feeder}' and cenario_id = {cenario_id}"))
                     conn.commit()
                 except SQLAlchemyError as e:
                     #conn.execute(text(f"ALTER  TABLE {tabela} NOCHECK CONSTRAINT all"))
                     print(f'Erro: {e}')
-
-
-
 
 def insert_data(tabela, data_dict):
     conf = load_config()
@@ -169,26 +179,6 @@ def insert_data(tabela, data_dict):
             conn.commit()
         except SQLAlchemyError as e:
             print(e)
-
-
-def insert_data_analise(data_dict):
-    conf = load_config()
-    engine = create_connection(conf)
-    with engine.connect() as conn:
-        try:
-            sql = f"select * from analise where cenario_id = {data_dict['cenario_id']}"
-            data_exist = conn.execute(text(sql)).fetchone()
-            if not data_exist:
-
-                conn.execute(text("INSERT INTO analise (cenario, cenario_id, empresa, sub, circuito, patamar_ini, patamar_fim) "
-                                  "VALUES (:cenario, :cenario_id, :empresa, :sub, :circuito, :patamar_ini, :patamar_fim)"),
-                    [data_dict],
-                            )
-                conn.commit()
-        except SQLAlchemyError as e:
-            print(e)
-
-
 
 
 if __name__ == '__main__':
