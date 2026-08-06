@@ -40,13 +40,17 @@ SOURCES = ['WIND', 'SOLAR']
 conf = load_config()
 engine = create_connection(conf)
 
+#NUM_PATAMARES = load_config(db='num_patamares', config_path= 'config_smartCAP.yml', var='data_smartCAP' )
+#step_slider = (int(NUM_PATAMARES) / 24)
+hora_ref = 10
+
 @server.route("/")
 def dashboard():
     return render_template(
         "dashboard2.html",
         limite_inferior=LIMITE_INFERIOR_PU,
         limite_superior=LIMITE_SUPERIOR_PU,
-        horario_referencia = 10
+        horario_referencia = hora_ref,
     )
 
 @server.route("/get_date_options", methods=["POST"])
@@ -58,7 +62,7 @@ def get_date_options():
 @server.route("/api/circuitos")
 def api_circuitos():
     try:
-        query = f'''Select analise_id, cenario, cenario_id, sub, circuito from dbo.analise; '''
+        query = f'''Select analise, cenario, cenario_id, controle_id, controle, sub, circuito from dbo.analise; '''
         circuitos = pd.read_sql_query(sql=query, con=engine)
         return circuitos.to_json(orient='records')
 
@@ -66,20 +70,43 @@ def api_circuitos():
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
 
+@server.route("/api/capacitores")
+def api_capacitores():
+    try:
+        cenario_id = request.args.get("cenario_id", type=int)
+        controle_id = request.args.get("controle_id", type=int)
+        circuito = request.args.get("circuito_id", type=str)
+
+        if not cenario_id or not circuito:
+            return jsonify({"erro": "Informe cenario_id e circuito"}), 400
+
+        query = f'''Select nome, patamar, step, vmag_1, vmag_2, vmag_3, available_steps FROM dbo.capacitor 
+            WHERE cenario_id={cenario_id} and controle_id={controle_id} 
+            and circuito='{circuito}' 
+            order by nome, patamar '''
+
+        resultado = pd.read_sql_query(sql=query, con=engine)
+        return resultado.to_dict(orient='list')
+
+    except Exception as e:
+        return jsonify({"erro": str(e)}), 500
+
 @server.route("/api/perfil-tensao")
 def api_perfil_tensao():
     try:
         cenario_id = request.args.get("cenario_id", type=int)
+        controle_id = request.args.get("controle_id", type=int)
         circuito = request.args.get("circuito_id", type=str)
-        patamar = request.args.get("horas", type=int, default=0)
+        hora = request.args.get("horas", type=int, default=0)
         tipo = request.args.get("tipo", type=int, default=0)   #  MT == 0 ou BT == 2
 
         if not cenario_id or not circuito:
             return jsonify({"erro": "Informe cenario_id e circuito"}), 400
 
         query = f'''Select patamar, node, tipo, v1, v2, distancia1, distancia2 FROM dbo.linha 
-        WHERE v1 > 0.4 and tipo<={tipo} and cenario_id ={cenario_id} and circuito='{circuito}' and patamar={patamar} 
-        order by patamar '''
+            WHERE v1 > 0.4 and tipo<={tipo} and cenario_id={cenario_id} and controle_id={controle_id} 
+            and circuito='{circuito}' and hora={hora} 
+            order by patamar '''
         resultado = pd.read_sql_query(sql=query, con=engine)
         return resultado.to_dict(orient='list')
 
@@ -113,6 +140,7 @@ def api_potencia_perdas():
     try:
         cenario_id = request.args.get("cenario_id", type=int)
         circuito = request.args.get("circuito_id", type=str)
+        controle_id = request.args.get("controle_id", type=int)
         if not cenario_id or not circuito:
             return jsonify({"erro": "Informe cenario_id e circuito"}), 400
 
@@ -122,7 +150,8 @@ def api_potencia_perdas():
                 , p3/sqrt(POWER(p3,2)+POWER(q3,2)) as fp3
                 , (p1+p2+p3) / sqrt(POWER((p1+p2+p3),2)+POWER((q1+q2+q3),2)) as fp_tri 
                 from dbo.circuito 
-                where cenario_id={cenario_id} and circuito='{circuito}' order by patamar '''
+                where cenario_id={cenario_id} and circuito='{circuito}' and controle_id={controle_id}  
+                order by patamar '''
 
         resultado = pd.read_sql_query(sql=query, con=engine)
 

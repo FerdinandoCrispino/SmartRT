@@ -105,6 +105,10 @@
     <label for="sel-cenario">Cenario (graficos individuais)</label>
     <select id="sel-cenario"></select>
   </div>
+  <div class="campo">
+    <label for="sel-controle">Controle</label>
+    <select id="sel-controle"></select>
+  </div>
   <div class="campo" style="min-width:280px;">
     <label for="sel-cenarios-comp">Cenarios para comparacao (radar)</label>
     <select id="sel-cenarios-comp" multiple></select>
@@ -133,7 +137,7 @@
       <div class="sub">Tensao (p.u.) por barra, ao longo do alimentador, no horário: <span id="text_perfil_tensao">{{horario_referencia}}</span> horas.</div>
       <div id="plot-perfil-tensao" class="plot tall"></div>
       <div class="slidecontainer">
-          <input type="range" min=0 max=23 value={{horario_referencia}} class="slider" id="myRange" oninput="getdataperfil()" width="100%">
+          <input type="range" min=1 max=24 step=1 value={{horario_referencia}} class="slider" id="myRange" oninput="getdataperfil()" width="100%">
           <input type="checkbox" id="MTBT" name="MTBT" value="0" checked>
           <label class="sub" for="MTBT"> Somente MT</label><br>
             <p class="sub">Hour: <span id="hour">1</span></p>
@@ -146,6 +150,20 @@
       <div id="plot-fator_potencia" class="plot tall"></div>
     </div>
   </div>
+
+    <div class="grid">
+    <div class="panel">
+      <h2>Atuação dos Bancos de Capacitores</h2>
+      <div class="sub">Curva de atuação dos bancos de capacitores</div>
+      <div id="plot-capacitores-step" class="plot"></div>
+    </div>
+    <div class="panel">
+      <h2>Perfil de tensão nas barras dos bancos de capacitores</h2>
+      <div class="sub">Magnitude das Tensões</div>
+      <div id="plot-capacitores-vmag" class="plot"></div>
+    </div>
+  </div>
+
 
   <div class="grid-3">
     <div class="panel">
@@ -187,6 +205,7 @@ function getdataperfil() {
     document.getElementById("text_perfil_tensao").innerHTML = slider.value;
     const circuitoId = document.getElementById('sel-circuito').value;
     const cenarioId = document.getElementById('sel-cenario').value;
+    const controleId = document.getElementById('sel-controle').value;
     const mtbt = document.getElementById('MTBT').checked;
     //console.log(typeof mtbt && mtbt);
     var tipo;
@@ -196,7 +215,7 @@ function getdataperfil() {
       tipo = 2;
     }
     //console.log( tipo);
-    carregarPerfilTensao(cenarioId, circuitoId, slider.value, tipo);
+    carregarPerfilTensao(cenarioId, circuitoId, slider.value, tipo, controleId);
 }
 
 // setInterval(function () {
@@ -231,6 +250,7 @@ async function carregarCircuitos() {
   const dados = await r.json();
   const sel = document.getElementById('sel-circuito');
   const selUnico = document.getElementById('sel-cenario');
+  const ctrlUnico = document.getElementById('sel-controle');
   const selMulti = document.getElementById('sel-cenarios-comp');
   console.log(dados)
   if (dados.erro || !dados.length) {
@@ -246,16 +266,163 @@ async function carregarCircuitos() {
   sel.innerHTML = circuitos_unico.map(c => `<option value="${c.circuito}">${c.circuito}</option>`).join('');
 
   const cenario_unico = [...new Map(dados.map(item =>  [item['cenario_id'], item])).values()];
+  const controle_unico = [...new Map(dados.map(item =>  [item['controle_id'], item])).values()];
 
   selUnico.innerHTML = cenario_unico.map(c => `<option value="${c.cenario_id}">${c.cenario}</option>`).join('');
+  ctrlUnico.innerHTML = controle_unico.map(c => `<option value="${c.controle_id}">${c.controle}</option>`).join('');
+
   selMulti.innerHTML = cenario_unico.map(c => `<option value="${c.cenario_id}">${c.cenario}</option>`).join('');
   // seleciona todos os cenarios por padrao na comparacao
   Array.from(selMulti.options).forEach(o => o.selected = true);
 }
 
-async function carregarPotenciaPerdas(cenarioId, circuitoId) {
+async function carregarControlCap(cenarioId, circuitoId, controleId) {
   try {
-    const r = await fetch(`/api/potencia-perdas?cenario_id=${cenarioId}&circuito_id=${circuitoId}`);
+    const r = await fetch(`/api/capacitores?cenario_id=${cenarioId}&circuito_id=${circuitoId}&controle_id=${controleId}`);
+    const d = await r.json();
+    console.log(d)
+    if (d.erro) throw new Error(d.erro);
+    if (!d) {
+      mostrarMensagem('plot-capacitores-step', 'Sem dados para este cenario/circuito.'); mostrarMensagem('plot-capacitores-step', 'Sem dados para este cenario/circuito.');
+      mostrarMensagem('plot-capacitores-vmag', 'Sem dados para este cenario/circuito.'); mostrarMensagem('plot-capacitores-vmag', 'Sem dados para este cenario/circuito.');
+      return;
+    }
+
+    //===========================
+    // Agrupa por nome
+    //===========================
+    const grupos = {};
+    for (let i = 0; i < d.nome.length; i++) {
+        const nome = d.nome[i];
+        if (!grupos[nome]) {
+            grupos[nome] = [];
+        }
+        grupos[nome].push({
+            patamar: d.patamar[i],
+            step: d.step[i],
+            v1: d.vmag_1[i],
+            v2: d.vmag_2[i],
+            v3: d.vmag_3[i]
+        });
+    }
+    const tracesStep = [];
+    const tracesVmag = [];
+
+    Object.entries(grupos).forEach(([nome, pontos]) => {
+
+          // ordena pelo patamar
+          pontos.sort((a, b) => a.patamar - b.patamar);
+
+          const x = pontos.map(p => p.patamar);
+
+          //---------------------------------
+          // Gráfico Step
+          //---------------------------------
+          tracesStep.push({
+              x: x,
+              y: pontos.map(p => p.step),
+              type: 'scatter',
+              mode: 'lines+markers',
+              name: nome,
+              line: {
+                  width: 2,
+                  shape: 'vh'
+              }
+          });
+
+          //---------------------------------
+          // Gráfico Tensões
+          //---------------------------------
+
+          tracesVmag.push({
+              x: x,
+              y: pontos.map(p => p.v1),
+              type: 'scatter',
+              mode: 'lines',
+              name: `${nome} - Fase A`,
+              line: {
+                  width: 2
+              }
+          });
+
+          tracesVmag.push({
+              x: x,
+              y: pontos.map(p => p.v2),
+              type: 'scatter',
+              mode: 'lines',
+              name: `${nome} - Fase B`,
+              line: {
+                  width: 2,
+                  //dash: 'dash'
+              }
+          });
+
+          tracesVmag.push({
+              x: x,
+              y: pontos.map(p => p.v3),
+              type: 'scatter',
+              mode: 'lines',
+              name: `${nome} - Fase C`,
+              line: {
+                  width: 2,
+                  //dash: 'dot'
+              }
+          });
+
+      });
+
+      //---------------------------------------
+      // Gráfico Step
+      //---------------------------------------
+      Plotly.newPlot(
+          'plot-capacitores-step',
+          tracesStep,
+          {
+              ...layoutBase,
+              //title: 'Atuação dos Bancos de Capacitores',
+              xaxis: {
+                  ...layoutBase.xaxis,
+                  title: 'Patamar'
+              },
+              yaxis: {
+                  ...layoutBase.yaxis,
+                  title: 'Step',
+                  dtick: 1
+              }
+          },
+          plotConfig
+      );
+
+      //---------------------------------------
+      // Gráfico Tensões
+      //---------------------------------------
+      Plotly.newPlot(
+          'plot-capacitores-vmag',
+          tracesVmag,
+          {
+              ...layoutBase,
+              //title: 'Magnitude das Tensões',
+              xaxis: {
+                  ...layoutBase.xaxis,
+                  title: 'Patamar'
+              },
+              yaxis: {
+                  ...layoutBase.yaxis,
+                  title: 'Tensão (pu)'
+              }
+          },
+          plotConfig
+      );
+
+  } catch (e) {
+    console.log(e)
+    mostrarMensagem('plot-capacitores-step', e.message, true);
+  }
+}
+
+async function carregarPotenciaPerdas(cenarioId, circuitoId, controleId) {
+  try {
+    const r = await fetch(`/api/potencia-perdas?cenario_id=${cenarioId}&circuito_id=${circuitoId}&controle_id=${controleId}`);
     const d = await r.json();
     console.log(d)
     if (d.erro) throw new Error(d.erro);
@@ -269,14 +436,14 @@ async function carregarPotenciaPerdas(cenarioId, circuitoId) {
       { x: d.patamar, y: d.q2, type: 'scatter', mode: 'lines', name: 'Potencia Reativa - Fase B (kVAr)', line: { color: CORES.reativa_2, width: 2.5 }, fill: 'tozeroy', fillcolor: 'rgba(79,209,197,0.08)' },
       { x: d.patamar, y: d.q3, type: 'scatter', mode: 'lines', name: 'Potencia Reativa - Fase C (kVAr)', line: { color: CORES.reativa_3, width: 2.5 } },
 
-    ], { ...layoutBase, xaxis: { ...layoutBase.xaxis, title: 'Hora', dtick: 2 }, yaxis: { ...layoutBase.yaxis, title: 'kW / kVAr' } }, plotConfig);
+    ], { ...layoutBase, xaxis: { ...layoutBase.xaxis, title: 'Hora', nticks: 24 }, yaxis: { ...layoutBase.yaxis, title: 'kW / kVAr' } }, plotConfig);
 
 
     Plotly.newPlot('plot-perdas', [
       { x: d.patamar, y: d.p_losses, type: 'scatter', mode: 'lines', name: 'Perda Ativa (kW)', line: { color: CORES.perdas_ativa, width: 2.5 }, fill: 'tozeroy', fillcolor: 'rgba(239,106,106,0.10)' },
       { x: d.patamar, y: d.q_losses, type: 'scatter', mode: 'lines', name: 'Perda Reativa (kVAr)', line: { color: CORES.perdas_reativa, width: 2.5 }, fill: 'tozeroy', fillcolor: 'rgba(239,106,106,0.10)' },
 
-    ], { ...layoutBase, xaxis: { ...layoutBase.xaxis, title: 'Hora', dtick: 2 }, yaxis: { ...layoutBase.yaxis, title: 'kW / kVAr' } }, plotConfig);
+    ], { ...layoutBase, xaxis: { ...layoutBase.xaxis, title: 'Hora',  nticks: 24 }, yaxis: { ...layoutBase.yaxis, title: 'kW / kVAr' } }, plotConfig);
 
 
     Plotly.newPlot('plot-fator_potencia', [
@@ -286,7 +453,7 @@ async function carregarPotenciaPerdas(cenarioId, circuitoId) {
 
       { x: d.patamar, y: d.fp_tri, type: 'scatter', mode: 'lines', name: 'Fator de Potência 3&#934;', visible: 'legendonly', line: { color: CORES.reativa_3, width: 4 } },
 
-    ], { ...layoutBase, xaxis: { ...layoutBase.xaxis, title: 'Hora', dtick: 2 }, yaxis: { ...layoutBase.yaxis, title: 'FP' } }, plotConfig);
+    ], { ...layoutBase, xaxis: { ...layoutBase.xaxis, title: 'Hora',  nticks: 24 }, yaxis: { ...layoutBase.yaxis, title: 'FP' } }, plotConfig);
 
 
   } catch (e) {
@@ -296,7 +463,7 @@ async function carregarPotenciaPerdas(cenarioId, circuitoId) {
   }
 }
 
-async function carregarPerfilTensao(cenarioId, circuitoId, hora, tipo) {
+async function carregarPerfilTensao(cenarioId, circuitoId, hora, tipo, controleID) {
   //document.documentElement.style.cursor = 'wait';
   document.body.style.cursor = 'wait';
   await new Promise(resolve => setTimeout(resolve, 50));
@@ -304,7 +471,7 @@ async function carregarPerfilTensao(cenarioId, circuitoId, hora, tipo) {
   // console.log(getComputedStyle(document.body).cursor);
 
   try {
-    const r = await fetch(`/api/perfil-tensao?cenario_id=${cenarioId}&circuito_id=${circuitoId}&horas=${hora}&tipo=${tipo}`);
+    const r = await fetch(`/api/perfil-tensao?cenario_id=${cenarioId}&circuito_id=${circuitoId}&horas=${hora}&tipo=${tipo}&controle_id=${controleID}`);
     const d = await r.json();
     if (d.erro) throw new Error(d.erro);
     if (!d) { mostrarMensagem('plot-perfil-tensao', 'Sem dados de tensao para este cenario/circuito.'); return; }
@@ -327,7 +494,7 @@ async function carregarPerfilTensao(cenarioId, circuitoId, hora, tipo) {
       const idtipo = d.tipo[i];
 
       const grupo = String(d.node[i] + d.tipo[i] );
-      console.log (grupo);
+      //console.log (grupo);
       traces.push({
           x: [x1, x2],
           y: [y1, y2],
@@ -438,15 +605,18 @@ async function carregarRadar(circuitoId, cenarioIds) {
 async function atualizarTudo() {
   const circuitoId = document.getElementById('sel-circuito').value;
   const cenarioId = document.getElementById('sel-cenario').value;
+  const controleId = document.getElementById('sel-controle').value;
   const cenariosComp = Array.from(document.getElementById('sel-cenarios-comp').selectedOptions).map(o => o.value);
   //console.log(circuitoId)
   //console.log(cenarioId)
   if (!circuitoId || !cenarioId) return;
 
-  carregarPotenciaPerdas(cenarioId, circuitoId);
-  carregarPerfilTensao(cenarioId, circuitoId, slider.value, 0);
-  carregarViolacoes(cenarioId, circuitoId);
-  carregarRadar(circuitoId, cenariosComp);
+  carregarPotenciaPerdas(cenarioId, circuitoId, controleId);
+  carregarPerfilTensao(cenarioId, circuitoId, slider.value, 0, controleId);
+  carregarControlCap(cenarioId, circuitoId, controleId);
+
+  carregarViolacoes(cenarioId, circuitoId, controleId);
+  carregarRadar(circuitoId, cenariosComp, controleId);
 }
 
 document.getElementById('sel-circuito').addEventListener('change', async (e) => {
@@ -455,6 +625,7 @@ document.getElementById('sel-circuito').addEventListener('change', async (e) => 
 });
 document.getElementById('sel-cenario').addEventListener('change', atualizarTudo);
 document.getElementById('sel-cenarios-comp').addEventListener('change', atualizarTudo);
+document.getElementById('sel-controle').addEventListener('change', atualizarTudo);
 
 (async function init() {
   await carregarCircuitos();

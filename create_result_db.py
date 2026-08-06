@@ -82,10 +82,10 @@ linha_table = Table('linha', metadata,
 equipamento_table = Table('equipamento', metadata,
                     Column('cenario_id', Integer),
                     Column('circuito', String(90)),
-                    Column('controle', String(30)),
                     Column('nome', String(90)),
+                    Column('controle_id', Integer),
+                    Column('controle', String(30)),
                     Column('kvar', Float),
-                    Column('ctrl_mode', Integer),
                     Column('pt_ratio', Float),
                     Column('ct_ratio', Float),
                     Column('ctrl_on', Float),
@@ -113,13 +113,16 @@ capacitor_table = Table ('capacitor' , metadata,
 def nome_tabelas():
     return tabelas
 
-def load_config(db = 'resultsDB', config_path="config_database.yml"):
+def load_config(db = 'resultsDB', config_path="config_database.yml", var = None):
 
     application_path = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(application_path, config_path), 'r') as file:
         config = yaml.load(file, Loader=yaml.BaseLoader)
 
-    config = config.get("databases", {}).get(db)
+    if config_path == "config_database.yml":
+        config = config.get("databases", {}).get(db)
+    else:
+        config = config.get(var, {}).get(db)
 
     if not config:
         raise ValueError(f"Configurações para '{db}' não foram encontradas.")
@@ -138,19 +141,21 @@ def create_connection(config_bdgd):
 
     return engine
 
-def check_cenario_exist(tabelas, feeder, cenario_id):
+def check_cenario_exist(tabelas, feeder, cenario_id, controle_id):
     conf = load_config()
     engine = create_connection(conf)
 
     for tabela in tabelas:
-        query = f"Select count(*) as cenario_id from {tabela} where circuito = '{feeder}' and cenario_id = {cenario_id}"
+        query = (f"Select count(*) as cenario_id from {tabela} where circuito = '{feeder}' and cenario_id = {cenario_id} "
+                 f"and controle_id={controle_id} ")
         with engine.connect() as conn:
             res = pd.read_sql_query(sql=query, con=conn)
             count_reg = res.iloc[0]['cenario_id']
             if count_reg > 0 :
                 try:
                     # conn.execute(text(f"TRUNCATE TABLE {tabela}"))
-                    conn.execute(text(f"DELETE from {tabela} where circuito = '{feeder}' and cenario_id = {cenario_id}"))
+                    conn.execute(text(f"DELETE from {tabela} where circuito = '{feeder}' and cenario_id = {cenario_id} "
+                                      f"and controle_id={controle_id}"))
                     conn.commit()
                 except SQLAlchemyError as e:
                     #conn.execute(text(f"ALTER  TABLE {tabela} NOCHECK CONSTRAINT all"))
@@ -179,7 +184,7 @@ def insert_data(tabela, data_dict):
             conn.commit()
         except SQLAlchemyError as e:
             print(e)
-
+    conn.close()
 
 if __name__ == '__main__':
 
