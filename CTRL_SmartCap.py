@@ -76,71 +76,94 @@ class Feeder_Condition:
         if self.controle == 'Tensao':
             for ctrl_cap in self.dss.capcontrols.names:
                 self.dss.capcontrols.name = ctrl_cap        # ativa o controle do capacitor
-                if self.dss.capcontrols.mode == 1:          # se já está configurado para tensão então não alterar.
-                    self.dss.capacitors.num_steps = 14
-                    self.dss.capacitors.states = [0] * 14   # iniciar com todos os passos desligados
-                    continue
-
                 self.dss.capcontrols.mode = 1               # Voltage
-                self.dss.capcontrols.on_setting = 218.5
-                self.dss.capcontrols.off_setting = 230
+                pt_ratio = self.dss.capcontrols.pt_ratio
+
+                self.dss.capacitors.name = self.dss.capcontrols.controlled_capacitor
+                self.dss.capacitors.num_steps = 14
+                self.dss.capacitors.states = [0] * 14      # iniciar com todos os passos desligados
+                kv_cap = self.dss.capacitors.kv * 1000
+
+                self.dss.capcontrols.name = ctrl_cap  # ativa o controle do capacitor
+                self.dss.capcontrols.on_setting = (kv_cap / pt_ratio) * 0.95   # 218.5 -> 0.95 pu
+                self.dss.capcontrols.off_setting = (kv_cap / pt_ratio) * 1     # 230   -> 1 pu
+
                 print(f'{self.dss.capcontrols.name}; {self.dss.capcontrols.mode}; {self.dss.capacitors.num_steps},'
-                      f'{self.dss.capacitors.states}')
+                      f'{self.dss.capacitors.states}, {self.dss.capcontrols.on_setting}, {self.dss.capcontrols.off_setting}')
             print(f'Capacitores alterados para VoltageControl!')
 
         elif self.controle == 'kvar':
             for ctrl_cap in self.dss.capcontrols.names:
                 self.dss.capcontrols.name = ctrl_cap  # ativa o controle do capacitor
+                self.dss.text(f"edit capcontrol.{ctrl_cap} enabled=true")
+                self.dss.capcontrols.mode = 2         # KVARCONTROL
+
                 self.dss.capacitors.name = self.dss.capcontrols.controlled_capacitor
                 kvar = self.dss.capacitors.kvar
-                self.dss.capcontrols.mode = 2         # KVARCONTROL
                 self.dss.capacitors.num_steps = 14
                 self.dss.capacitors.states = [0] * 14  # iniciar com todos os passos desligados
-                self.dss.capcontrols.on_setting = kvar / 6  #300
-                self.dss.capcontrols.off_setting = kvar / 12  #100
+
+                self.dss.capcontrols.name = ctrl_cap  # ativa o controle do capacitor
+                self.dss.capcontrols.on_setting = kvar / 4  # 300
+                self.dss.capcontrols.off_setting = kvar / 12  # 100
+
                 print(f'{self.dss.capcontrols.name}; modo:{self.dss.capcontrols.mode}; num_step:{self.dss.capacitors.num_steps},'
                       f'{self.dss.capacitors.states}, {self.dss.capcontrols.on_setting}, {self.dss.capcontrols.off_setting}')
             print(f'Capacitores alterados para KVARControl!')
 
         elif self.controle == 'Tempo':
             for ctrl_cap in self.dss.capcontrols.names:
-                self.dss.capcontrols.name = ctrl_cap  # ativa o controle do capacitor
-                self.dss.capcontrols.mode = 3         # Time
-                self.dss.capacitors.num_steps = 14
-                self.dss.capacitors.states = [0] * 14  # iniciar com todos os passos desligados
+                self.dss.capcontrols.name = ctrl_cap   # ativa o controle do capacitor
+                self.dss.capcontrols.mode = 3          # Time
                 self.dss.capcontrols.on_setting = 7.0
                 self.dss.capcontrols.off_setting = 21.0
+
+                self.dss.capacitors.name = self.dss.capcontrols.controlled_capacitor
+                self.dss.capacitors.num_steps = 14
+                self.dss.capacitors.states = [0] * 14  # iniciar com todos os passos desligados
+
                 print(f'{self.dss.capcontrols.name}; Modo:{self.dss.capcontrols.mode}; num_step:{self.dss.capacitors.num_steps},'
                       f'{self.dss.capacitors.states}, {self.dss.capcontrols.on_setting}, {self.dss.capcontrols.off_setting}')
             print(f'Capacitores alterados para TimeControl!')
 
         elif self.controle == 'FP':
             for ctrl_cap in self.dss.capcontrols.names:
-                self.dss.capcontrols.name = ctrl_cap  # ativa o controle do capacitor
-                self.dss.capcontrols.mode = 4         # PF
-                self.dss.capacitors.num_steps = 14
-                self.dss.capacitors.states = [0] * 14  # iniciar com todos os passos desligados
+                self.dss.capcontrols.name = ctrl_cap   # ativa o controle do capacitor
+                self.dss.capcontrols.mode = 4          # PF
                 self.dss.capcontrols.on_setting = 0.90
                 self.dss.capcontrols.off_setting = 0.95
-                print(f'{self.dss.capcontrols.name}; modo:{self.dss.capcontrols.mode}; num_step{self.dss.capacitors.num_steps},'
+
+                self.dss.capacitors.name = self.dss.capcontrols.controlled_capacitor
+                self.dss.capacitors.num_steps = 14
+                self.dss.capacitors.states = [0] * 14  # iniciar com todos os passos desligados
+
+                print(f'{self.dss.capcontrols.name}; modo:{self.dss.capcontrols.mode}; num_step:{self.dss.capacitors.num_steps},'
                       f'{self.dss.capacitors.states}')
             print(f'Capacitores alterados para PFControl!')
 
         elif self.controle == 'Desligado':
             # remover capacitores
-            capacitor_names = self.dss.capacitors.names
-            for capacitor_name in capacitor_names:
+            for ctrl_cap in self.dss.capcontrols.names:
+                self.dss.capcontrols.name = ctrl_cap  # ativa o controle do capacitor
+
+                self.dss.capacitors.name = self.dss.capcontrols.controlled_capacitor
                 self.dss.capacitors.states = [0]
-                self.dss.text(f"disable capacitor.{capacitor_name}")
-                print(f'{self.dss.capcontrols.name}; modo:{self.dss.capcontrols.mode}; num_step{self.dss.capacitors.num_steps},'
+
+                print(f'{self.dss.capcontrols.name}; modo:{self.dss.capcontrols.mode}; num_step:{self.dss.capacitors.num_steps},'
                       f'{self.dss.capacitors.states}')
+
+                self.dss.text(f"disable capacitor.{ctrl_cap}")
+
             print(f'Capacitores desligado!')
 
         # elif self.cenario == 'Caso_Base':
         elif self.controle == 'Fixo':
             for ctrl_cap in self.dss.capcontrols.names:
-                self.dss.capcontrols.name = ctrl_cap  # ativa o controle do capacitor
+                self.dss.capcontrols.name = ctrl_cap             # ativa o controle do capacitor
+                self.dss.capacitors.name = self.dss.capcontrols.controlled_capacitor
+                self.dss.capacitors.states = [1]
                 self.dss.text(f"disable CapControl.{ctrl_cap}")  # desabilita o controle
+
                 print(f'{self.dss.capcontrols.name}; {self.dss.capcontrols.mode}; {self.dss.capacitors.num_steps},'
                   f'{self.dss.capacitors.states}')
 
