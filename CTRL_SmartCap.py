@@ -211,7 +211,7 @@ class Feeder_Condition:
 
         self.dss.text("set normvminpu = 0.93")
         self.dss.text("set mode = daily")
-        self.dss.text("set controlmode = STATIC")   # time
+        self.dss.text("set controlmode = time")   # time  static
         self.dss.text("set tolerance = 0.0001")
         self.dss.text("set maxcontroliter = 100")
         self.dss.text("set maxiterations = 100")
@@ -631,7 +631,11 @@ class Feeder_Condition:
                         break
 
             print(f"{self.feeder}; {self.cenario}; {self.controle}; Patamar: {number}, Hour: {hour}, Seconds: {sec}")
-            print(f'{self.dss.capacitors.name}:  {self.dss.capacitors.states}')
+            for cap_name in self.dss.capacitors.names:
+                self.dss.capacitors.name = cap_name
+                print(f'{self.dss.capacitors.name}:  {self.dss.capacitors.states} '
+                      f'kvar: {float(self.dss.capacitors.kvar) * (sum(self.dss.capacitors.states) / int(self.dss.capacitors.num_steps) )}  de {float(self.dss.capacitors.kvar)} ')
+
             if 1 <= hour <= 24 and sec == 0:
                 path_dss = os.path.dirname(self.dss_file)
                 file_exp = os.path.join(path_dss, f'{self.feeder}_{self.cenario}_{self.controle}_EXP_Profile_time_{hour}.CSV')
@@ -721,7 +725,7 @@ def process_task(task: Task):
     for feeder in feeders:
         run_feeder_mode(
             utility=utility,
-            substation=feeder[1:4],
+            substation=config['feeder_path'].split(os.sep)[-1],  #feeder[1:4],
             feeder=feeder,
             cenarios=cenarios,
             controles=controles,
