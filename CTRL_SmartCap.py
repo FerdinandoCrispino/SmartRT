@@ -83,10 +83,12 @@ class Feeder_Condition:
                 self.dss.capacitors.num_steps = 14
                 self.dss.capacitors.states = [0] * 14      # iniciar com todos os passos desligados
                 kv_cap = self.dss.capacitors.kv * 1000
+                self.dss.text(f"enable capacitor.{ctrl_cap}")
 
                 self.dss.capcontrols.name = ctrl_cap  # ativa o controle do capacitor
-                self.dss.capcontrols.on_setting = (kv_cap / pt_ratio) * 0.95   # 218.5 -> 0.95 pu
+                self.dss.capcontrols.on_setting = (kv_cap / pt_ratio) * 0.97   # 218.5 -> 0.95 pu
                 self.dss.capcontrols.off_setting = (kv_cap / pt_ratio) * 1     # 230   -> 1 pu
+                self.dss.text(f"enable CapControl.{ctrl_cap}")
 
                 print(f'{self.dss.capcontrols.name}; {self.dss.capcontrols.mode}; {self.dss.capacitors.num_steps},'
                       f'{self.dss.capacitors.states}, {self.dss.capcontrols.on_setting}, {self.dss.capcontrols.off_setting}')
@@ -102,10 +104,12 @@ class Feeder_Condition:
                 kvar = self.dss.capacitors.kvar
                 self.dss.capacitors.num_steps = 14
                 self.dss.capacitors.states = [0] * 14  # iniciar com todos os passos desligados
+                self.dss.text(f"enable capacitor.{ctrl_cap}")
 
                 self.dss.capcontrols.name = ctrl_cap  # ativa o controle do capacitor
                 self.dss.capcontrols.on_setting = kvar / 4  # 300
                 self.dss.capcontrols.off_setting = kvar / 12  # 100
+                self.dss.text(f"enable CapControl.{ctrl_cap}")
 
                 print(f'{self.dss.capcontrols.name}; modo:{self.dss.capcontrols.mode}; num_step:{self.dss.capacitors.num_steps},'
                       f'{self.dss.capacitors.states}, {self.dss.capcontrols.on_setting}, {self.dss.capcontrols.off_setting}')
@@ -117,6 +121,7 @@ class Feeder_Condition:
                 self.dss.capcontrols.mode = 3          # Time
                 self.dss.capcontrols.on_setting = 7.0
                 self.dss.capcontrols.off_setting = 21.0
+                self.dss.text(f"enable CapControl.{ctrl_cap}")
 
                 self.dss.capacitors.name = self.dss.capcontrols.controlled_capacitor
                 self.dss.capacitors.num_steps = 14
@@ -132,10 +137,12 @@ class Feeder_Condition:
                 self.dss.capcontrols.mode = 4          # PF
                 self.dss.capcontrols.on_setting = 0.90
                 self.dss.capcontrols.off_setting = 0.95
+                self.dss.text(f"enable CapControl.{ctrl_cap}")
 
                 self.dss.capacitors.name = self.dss.capcontrols.controlled_capacitor
                 self.dss.capacitors.num_steps = 14
                 self.dss.capacitors.states = [0] * 14  # iniciar com todos os passos desligados
+                self.dss.text(f"enable capacitor.{ctrl_cap}")
 
                 print(f'{self.dss.capcontrols.name}; modo:{self.dss.capcontrols.mode}; num_step:{self.dss.capacitors.num_steps},'
                       f'{self.dss.capacitors.states}')
@@ -204,7 +211,7 @@ class Feeder_Condition:
 
         self.dss.text("set normvminpu = 0.93")
         self.dss.text("set mode = daily")
-        self.dss.text("set controlmode = time")
+        self.dss.text("set controlmode = STATIC")   # time
         self.dss.text("set tolerance = 0.0001")
         self.dss.text("set maxcontroliter = 100")
         self.dss.text("set maxiterations = 100")
@@ -624,6 +631,7 @@ class Feeder_Condition:
                         break
 
             print(f"{self.feeder}; {self.cenario}; {self.controle}; Patamar: {number}, Hour: {hour}, Seconds: {sec}")
+            print(f'{self.dss.capacitors.name}:  {self.dss.capacitors.states}')
             if 1 <= hour <= 24 and sec == 0:
                 path_dss = os.path.dirname(self.dss_file)
                 file_exp = os.path.join(path_dss, f'{self.feeder}_{self.cenario}_{self.controle}_EXP_Profile_time_{hour}.CSV')
