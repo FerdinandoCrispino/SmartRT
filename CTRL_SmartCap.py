@@ -64,6 +64,9 @@ class Feeder_Condition:
         # Verifica o cenário e as modificações do DSS necessárias
         self.__edit_capacitor()
 
+        # Acrescenta monitores nos capacitores
+        self.__add_monitor_cap()
+
         # verifica se já existe o cenario no banco de dados e apaga os dados para serem substituidos
         check_cenario_exist(nome_tabelas(), self.feeder, self.cenario_id, self.controle_id)
 
@@ -72,6 +75,7 @@ class Feeder_Condition:
 
     def __edit_capacitor(self):
         """ Implementa modificações no OpenDSS para a criação do cenario"""
+        self.dss.text(f"batchedit capacitor..* conn=wye")
 
         if self.controle == 'Tensao':
             for ctrl_cap in self.dss.capcontrols.names:
@@ -82,13 +86,14 @@ class Feeder_Condition:
                 self.dss.capacitors.name = self.dss.capcontrols.controlled_capacitor
                 self.dss.capacitors.num_steps = 14
                 self.dss.capacitors.states = [0] * 14      # iniciar com todos os passos desligados
-                kv_cap = self.dss.capacitors.kv * 1000
-                self.dss.text(f"enable capacitor.{ctrl_cap}")
+                kv_cap = (self.dss.capacitors.kv * 1000) / np.sqrt(3)
+                self.dss.text(f"enable capacitor.{self.dss.capacitors.name}")
 
                 self.dss.capcontrols.name = ctrl_cap  # ativa o controle do capacitor
-                self.dss.capcontrols.on_setting = (kv_cap / pt_ratio) * 0.97   # 218.5 -> 0.95 pu
+                self.dss.capcontrols.on_setting = (kv_cap / pt_ratio) * 0.98   # 218.5 -> 0.95 pu
                 self.dss.capcontrols.off_setting = (kv_cap / pt_ratio) * 1     # 230   -> 1 pu
-                self.dss.text(f"enable CapControl.{ctrl_cap}")
+                #self.dss.text(f"enable CapControl.{ctrl_cap}")
+                self.dss.text(f"edit capcontrol.{ctrl_cap} enabled=true")
 
                 print(f'{self.dss.capcontrols.name}; {self.dss.capcontrols.mode}; {self.dss.capacitors.num_steps},'
                       f'{self.dss.capacitors.states}, {self.dss.capcontrols.on_setting}, {self.dss.capcontrols.off_setting}')
@@ -104,12 +109,12 @@ class Feeder_Condition:
                 kvar = self.dss.capacitors.kvar
                 self.dss.capacitors.num_steps = 14
                 self.dss.capacitors.states = [0] * 14  # iniciar com todos os passos desligados
-                self.dss.text(f"enable capacitor.{ctrl_cap}")
+                self.dss.text(f"enable capacitor.{self.dss.capacitors.name}")
 
                 self.dss.capcontrols.name = ctrl_cap  # ativa o controle do capacitor
                 self.dss.capcontrols.on_setting = kvar / 4  # 300
                 self.dss.capcontrols.off_setting = kvar / 12  # 100
-                self.dss.text(f"enable CapControl.{ctrl_cap}")
+                self.dss.text(f"edit capcontrol.{self.dss.capcontrols.name} enabled=true")
 
                 print(f'{self.dss.capcontrols.name}; modo:{self.dss.capcontrols.mode}; num_step:{self.dss.capacitors.num_steps},'
                       f'{self.dss.capacitors.states}, {self.dss.capcontrols.on_setting}, {self.dss.capcontrols.off_setting}')
@@ -121,11 +126,13 @@ class Feeder_Condition:
                 self.dss.capcontrols.mode = 3          # Time
                 self.dss.capcontrols.on_setting = 7.0
                 self.dss.capcontrols.off_setting = 21.0
-                self.dss.text(f"enable CapControl.{ctrl_cap}")
+                #self.dss.text(f"enable CapControl.{ctrl_cap}")
+                self.dss.text(f"edit capcontrol.{ctrl_cap} enabled=true")
 
                 self.dss.capacitors.name = self.dss.capcontrols.controlled_capacitor
                 self.dss.capacitors.num_steps = 14
                 self.dss.capacitors.states = [0] * 14  # iniciar com todos os passos desligados
+                self.dss.text(f"enable capacitor.{self.dss.capacitors.name}")
 
                 print(f'{self.dss.capcontrols.name}; Modo:{self.dss.capcontrols.mode}; num_step:{self.dss.capacitors.num_steps},'
                       f'{self.dss.capacitors.states}, {self.dss.capcontrols.on_setting}, {self.dss.capcontrols.off_setting}')
@@ -137,12 +144,14 @@ class Feeder_Condition:
                 self.dss.capcontrols.mode = 4          # PF
                 self.dss.capcontrols.on_setting = 0.90
                 self.dss.capcontrols.off_setting = 0.95
-                self.dss.text(f"enable CapControl.{ctrl_cap}")
+                #self.dss.text(f"enable CapControl.{ctrl_cap}")
+                self.dss.text(f"edit capcontrol.{ctrl_cap} enabled=true")
+
 
                 self.dss.capacitors.name = self.dss.capcontrols.controlled_capacitor
                 self.dss.capacitors.num_steps = 14
                 self.dss.capacitors.states = [0] * 14  # iniciar com todos os passos desligados
-                self.dss.text(f"enable capacitor.{ctrl_cap}")
+                self.dss.text(f"enable capacitor.{self.dss.capacitors.name}")
 
                 print(f'{self.dss.capcontrols.name}; modo:{self.dss.capcontrols.mode}; num_step:{self.dss.capacitors.num_steps},'
                       f'{self.dss.capacitors.states}')
@@ -150,34 +159,45 @@ class Feeder_Condition:
 
         elif self.controle == 'Desligado':
             # remover capacitores
+
             for ctrl_cap in self.dss.capcontrols.names:
                 self.dss.capcontrols.name = ctrl_cap  # ativa o controle do capacitor
+                self.dss.text(f"disable CapControl.{ctrl_cap}")
 
                 self.dss.capacitors.name = self.dss.capcontrols.controlled_capacitor
                 self.dss.capacitors.states = [0]
+                #self.dss.capacitors.open_all_steps()
+                self.dss.text(f"disable capacitor.{self.dss.capacitors.name}")
 
                 print(f'{self.dss.capcontrols.name}; modo:{self.dss.capcontrols.mode}; num_step:{self.dss.capacitors.num_steps},'
                       f'{self.dss.capacitors.states}')
-
-                self.dss.text(f"disable capacitor.{ctrl_cap}")
-
             print(f'Capacitores desligado!')
 
         # elif self.cenario == 'Caso_Base':
         elif self.controle == 'Fixo':
-            for ctrl_cap in self.dss.capcontrols.names:
-                self.dss.capcontrols.name = ctrl_cap             # ativa o controle do capacitor
-                self.dss.capacitors.name = self.dss.capcontrols.controlled_capacitor
-                self.dss.capacitors.states = [1]
-                self.dss.text(f"disable CapControl.{ctrl_cap}")  # desabilita o controle
 
-                print(f'{self.dss.capcontrols.name}; {self.dss.capcontrols.mode}; {self.dss.capacitors.num_steps},'
-                  f'{self.dss.capacitors.states}')
+            self.dss.text(f"batchedit capcontrol..* enable=false")
 
-            print(f'Controle: {self.controle} - Sem alterações na configuração dos Capacitores')
+            # for ctrl_cap in self.dss.capcontrols.names:
+            #     self.dss.capcontrols.name = ctrl_cap             # ativa o controle do capacitor
+            #     self.dss.text(f"disable CapControl.{ctrl_cap}")  # desabilita o controle
+            #
+            #     self.dss.capacitors.name = self.dss.capcontrols.controlled_capacitor
+            #     self.dss.text(f"enable capacitor.{self.dss.capacitors.name}")
+            #     self.dss.capacitors.states = [1]
+            #     #self.dss.capacitors.close_all_steps()
+            #
+            #     print(f'{self.dss.capcontrols.name}; {self.dss.capcontrols.mode}; {self.dss.capacitors.num_steps},'
+            #       f'{self.dss.capacitors.states}')
+            # print(f'Controle: {self.controle} - Sem alterações na configuração dos Capacitores')
 
         else:
             print(f'Cenário ou Controle não definidos: {self.cenario} - {self.controle}')
+
+    def __add_monitor_cap(self):
+        for cap_name in self.dss.capacitors.names:
+            self.dss.text(f"new monitor.{cap_name} element=Capacitor.{cap_name} terminal=1 mode=0 ppolar=no")
+
 
     def __add_monitor_powers(self):
         """ Navega pela topologia da rede de um bus qualquer até o início do circuito
@@ -368,6 +388,14 @@ class Feeder_Condition:
             insert_data('analise', [data])
         except:
             print('Error: insert database...')
+
+    def _read_voltage_cap(self):
+        for capacitor_name in self.dss.capacitors.names:
+            self.dss.monitors.name = capacitor_name
+            print(f'Capacitor: {capacitor_name} '
+                  f'kV: {self.dss.monitors.channel(1)[-1]/7967}  {self.dss.monitors.channel(3)[-1]/7967} {self.dss.monitors.channel(5)[-1]/7967}')
+
+
 
     def _read_cap(self, number, hour, sec):
         cap_rows = []
@@ -635,6 +663,7 @@ class Feeder_Condition:
                 self.dss.capacitors.name = cap_name
                 print(f'{self.dss.capacitors.name}:  {self.dss.capacitors.states} '
                       f'kvar: {float(self.dss.capacitors.kvar) * (sum(self.dss.capacitors.states) / int(self.dss.capacitors.num_steps) )}  de {float(self.dss.capacitors.kvar)} ')
+
 
             if 1 <= hour <= 24 and sec == 0:
                 path_dss = os.path.dirname(self.dss_file)
