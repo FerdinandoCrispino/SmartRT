@@ -93,7 +93,7 @@ class Feeder_Condition:
 
                 self.dss.capcontrols.name = ctrl_cap  # ativa o controle do capacitor
                 self.dss.capcontrols.on_setting = (kv_cap / pt_ratio) * 0.95   # 218.5 -> 0.95 pu
-                self.dss.capcontrols.off_setting = (kv_cap / pt_ratio) * 1     # 230   -> 1 pu
+                self.dss.capcontrols.off_setting = (kv_cap / pt_ratio) * 1.02     # 230   -> 1 pu
                 #self.dss.text(f"enable CapControl.{ctrl_cap}")
                 self.dss.text(f"edit capcontrol.{ctrl_cap} enabled=true")
 
@@ -115,8 +115,8 @@ class Feeder_Condition:
                 self.dss.text(f"enable capacitor.{self.dss.capacitors.name}")
 
                 self.dss.capcontrols.name = ctrl_cap  # ativa o controle do capacitor
-                self.dss.capcontrols.on_setting = kvar / 4  # 300
-                self.dss.capcontrols.off_setting = kvar / 12  # 100
+                self.dss.capcontrols.on_setting = kvar / 4  # 300       (0.67*kvar)
+                self.dss.capcontrols.off_setting = kvar / 12  # 100     (-0.5*kvar)
                 self.dss.text(f"edit capcontrol.{self.dss.capcontrols.name} enabled=true")
 
                 print(f'{self.dss.capcontrols.name}; modo:{self.dss.capcontrols.mode}; num_step:{self.dss.capacitors.num_steps},'
@@ -145,10 +145,10 @@ class Feeder_Condition:
 
         elif self.controle == 'FP':
             for ctrl_cap in self.dss.capcontrols.names:
-                self.dss.capcontrols.name = ctrl_cap   # ativa o controle do capacitor
-                self.dss.capcontrols.mode = 4          # PF
-                self.dss.capcontrols.on_setting = 0.90
-                self.dss.capcontrols.off_setting = 0.95
+                self.dss.capcontrols.name = ctrl_cap            # ativa o controle do capacitor
+                self.dss.capcontrols.mode = 4                   # PF
+                self.dss.capcontrols.on_setting = 0.95          # (kvar, se PF < 0.97 ATRASADO)
+                self.dss.capcontrols.off_setting = 0.98         # (0, se PF < -0.97 adiantado e restringir kw<kw_mim)
                 #self.dss.text(f"enable CapControl.{ctrl_cap}")
                 self.dss.text(f"edit capcontrol.{ctrl_cap} enabled=true")
 
@@ -238,7 +238,7 @@ class Feeder_Condition:
 
         self.dss.text("set normvminpu = 0.93")
         self.dss.text("set mode = daily")
-        self.dss.text("set controlmode = time")   # time  static
+        self.dss.text("set controlmode = static")   # time  static
         self.dss.text("set tolerance = 0.0001")
         self.dss.text("set maxcontroliter = 100")
         self.dss.text("set maxiterations = 100")
@@ -507,7 +507,7 @@ class Feeder_Condition:
         data_powers_losses = list()
 
         losses = dss.circuit.losses
-        #losses = dss.circuit.line_losses
+        losses_line = dss.circuit.line_losses
 
         # header = self.dss.monitors.header
         dss.monitors.name = self.monitor
@@ -536,6 +536,8 @@ class Feeder_Condition:
             "q3": q_phase3,
             "p_losses": losses[0]/1000,
             "q_losses": losses[1]/1000,
+            "p_losses_line": losses_line[0] / 1000,
+            "q_losses_line": losses_line[1] / 1000,
         })
 
         self.__save_results_db("circuito", data_powers_losses)

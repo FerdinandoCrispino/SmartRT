@@ -126,7 +126,7 @@
     </div>
     <div class="panel">
       <h2>Perdas Elétricas</h2>
-      <div class="sub">Perdas totais do circuito ao longo do dia (kW/kVAr)</div>
+      <div class="sub">Perdas totais do circuito ao longo do dia: <span id="myspan"> kVAr </span></div>
       <div id="plot-perdas" class="plot"></div>
     </div>
   </div>
@@ -430,6 +430,15 @@ async function carregarControlCap(cenarioId, circuitoId, controleId) {
   }
 }
 
+
+function calcularAcumulado (array) {
+    let soma = 0;
+    let norm = 0;
+    const accum = array.map(valor => soma += valor);
+    const max = Math.max.apply(Math, accum);
+    return accum.map(valor => norm = (valor/max) * 100);
+};
+
 async function carregarPotenciaPerdas(cenarioId, circuitoId, controleId) {
   try {
     const r = await fetch(`/api/potencia-perdas?cenario_id=${cenarioId}&circuito_id=${circuitoId}&controle_id=${controleId}`);
@@ -439,19 +448,33 @@ async function carregarPotenciaPerdas(cenarioId, circuitoId, controleId) {
     if (!d) { mostrarMensagem('plot-potencia', 'Sem dados para este cenario/circuito.'); mostrarMensagem('plot-perdas', 'Sem dados para este cenario/circuito.'); return; }
 
     const dataHora = [];
+    const losses_perc = []
+    const losses_line_perc = []
+    const demanda_tri = []
     const max_patamar  = Math.max.apply(Math,d.patamar);
     //console.log (max_patamar);
     for (let i = 0; i < max_patamar+1; i++) {
       //console.log((60/((max_patamar+1) / 24) * 60))
       given_seconds = d.patamar[i] * (60 / ((max_patamar + 1) / 24) * 60);
-
-
+      demanda_tri[i] = (d.p1[1] + d.p2[i] + d.p3[i]);
+      losses_perc[i] = (d.p_losses[i] /demanda_tri[i]) * 100;
+      losses_line_perc[i] = (d.p_losses_line[i] /demanda_tri[i]) * 100;
       //new Date(SECONDS * 1000).toISOString().substring(14, 19)
       //console.log(timeString)
       //console.log(given_seconds)
       dataHora.push(new Date(given_seconds * 1000).toISOString().slice(11, 16))
       //console.log(dataHora[i])
     }
+
+    console.log(losses_perc)
+    console.log("losses_line_perc")
+    console.log(losses_line_perc)
+    losses_accumulated  = calcularAcumulado(losses_perc);
+    let energy_losses = 0;
+    let demanda = 0;
+    d.p_losses.forEach((el) => energy_losses += el);
+    demanda_tri.forEach((el) => demanda += el);
+    document.getElementById("myspan").textContent=(energy_losses/max_patamar*24).toFixed(2) + " kVAr  " + (energy_losses/demanda*100).toFixed(2) + " %";
 
     Plotly.newPlot('plot-potencia', [
       { x: dataHora, y: d.p1, type: 'scatter', mode: 'lines', name: 'Potencia Ativa - Fase A (kW)', line: { color: CORES.ativa_1, width: 2.5 }, fill: 'tozeroy', fillcolor: 'rgba(79,209,197,0.08)' },
@@ -465,10 +488,14 @@ async function carregarPotenciaPerdas(cenarioId, circuitoId, controleId) {
 
 
     Plotly.newPlot('plot-perdas', [
-      { x: d.patamar, y: d.p_losses, type: 'scatter', mode: 'lines', name: 'Perda Ativa (kW)', line: { color: CORES.perdas_ativa, width: 2.5 }, fill: 'tozeroy', fillcolor: 'rgba(239,106,106,0.10)' },
-      { x: d.patamar, y: d.q_losses, type: 'scatter', mode: 'lines', name: 'Perda Reativa (kVAr)', line: { color: CORES.perdas_reativa, width: 2.5 }, fill: 'tozeroy', fillcolor: 'rgba(239,106,106,0.10)' },
+      { x: d.patamar, y: losses_perc, type: 'scatter', mode: 'lines', name: 'Perdas (%)', line: { color: CORES.perdas_ativa, width: 2.5 }, fill: 'tozeroy', fillcolor: 'rgba(239,106,106,0.10)' },
+      { x: d.patamar, y: losses_line_perc, type: 'scatter', mode: 'lines', name: 'Perdas nas Linhas (%)', line: { color: CORES.perdas_reativa, width: 2.5 }, fill: 'tozeroy', fillcolor: 'rgba(239,106,106,0.10)' },
+     //{ x: d.patamar, y: losses_accumulated, type: 'scatter', mode: 'lines', name: 'Perdas (%)', line: { color: CORES.perdas_ativa, width: 2.5 }, fill: 'tozeroy', fillcolor: 'rgba(239,106,106,0.10)' },
 
-    ], { ...layoutBase, xaxis: { ...layoutBase.xaxis, title: 'Hora',  nticks: 24 }, yaxis: { ...layoutBase.yaxis, title: 'kW / kVAr' } }, plotConfig);
+      //{ x: d.patamar, y: d.p_losses, type: 'scatter', mode: 'lines', name: 'Perda Ativa (kW)', line: { color: CORES.perdas_ativa, width: 2.5 }, fill: 'tozeroy', fillcolor: 'rgba(239,106,106,0.10)' },
+      //{ x: d.patamar, y: d.q_losses, type: 'scatter', mode: 'lines', name: 'Perda Reativa (kVAr)', line: { color: CORES.perdas_reativa, width: 2.5 }, fill: 'tozeroy', fillcolor: 'rgba(239,106,106,0.10)' },
+
+    ], { ...layoutBase, xaxis: { ...layoutBase.xaxis, title: 'Hora',  nticks: 24 }, yaxis: { ...layoutBase.yaxis,  title: '%' } }, plotConfig);
 
 
     Plotly.newPlot('plot-fator_potencia', [
