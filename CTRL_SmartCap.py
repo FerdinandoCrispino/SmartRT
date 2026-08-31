@@ -11,7 +11,6 @@ import pyodbc
 import pandas as pd
 import numpy as np
 import py_dss_interface
-#from py_dss_toolkit import dss_tools
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Tuple
@@ -52,6 +51,8 @@ class Feeder_Condition:
         self.controle_id = controle.split(",")[0]
         self.controle = controle.split(",")[1]
 
+        self.file_load_pf = "load_fp.csv"
+
         # ensure DSS is ready
         self._read_dss_file()
 
@@ -60,6 +61,9 @@ class Feeder_Condition:
 
         # add monitor at first element
         self.monitor = self.__add_monitor_powers()
+
+        # Cria um arquivo com variação normal do FP para cada carga - Testes
+        self.__create_fp_carga()
 
         # Verifica o cenário e as modificações do DSS necessárias
         self.__edit_capacitor()
@@ -73,9 +77,62 @@ class Feeder_Condition:
         # salva os dados de configuração do cenario
         self.__save_cenario()
 
+    def __edit_fp_carga(self, patamar):
+        """ Altera o fator de potência das cargas a partir de uma distribuição nomal entre um valor máximo e minimo"""
+
+        # Se exister usar o arquivos de fator de potencia das cargas
+        dss = self.dss
+        file_load_pf = self.file_load_pf
+        feeder_path = Path(self.dss_file).resolve().parent
+        master_path = find_file(file_load_pf, search_path=feeder_path)
+        if master_path:
+            print(f'Alterando o FP das cargas...')
+            df = pd.read_csv(file_load_pf,delimiter=',')
+            df = df.loc[df['patamar'] == patamar, ['load', 'FP']]
+            for df in df.itertuples():
+                dss.text(f"edit load.{df.load} pf={df.FP:.4f}")
+            return
+
+    def __create_fp_carga(self):
+        # TODO alterar para que a alteração do FP seja a mesma aplicado a todos os cenários ao meso tempo aplicar diferentes valores para cada solve
+        dss = self.dss
+        dss.loads.first()
+        load_fp=[]
+
+        feeder_path = Path(self.dss_file).resolve().parent
+        master_path = find_file(self.file_load_pf, search_path=feeder_path)
+        if master_path:  # se o arquivo já existe sair... para gerar o novo arquivo deve ser removido do diretorio
+            return
+        # Parâmetros da Distribuição Normal e limites do Fator de Potência (fp)
+        media = 0.92
+        desvio_padrao = 0.30
+        fp_min = 0.60
+        fp_max = 0.99
+
+        for index in range(self.total_patamar):
+            dss.loads.first()
+            for _ in range(dss.loads.count):
+                load_name = dss.loads.name
+                # Loop de rejeição: repete até gerar um valor dentro dos limites
+                while True:
+                    val = np.random.normal(media, desvio_padrao)
+                    if fp_min <= val <= fp_max:
+                        fp_novo = f'{val:.4f}'
+                        break
+                #dss.text(f"edit load.{load_name} pf={fp_novo:.4f}")
+
+                dss.loads.next()
+
+                load_fp.append({'patamar':index, 'load': load_name, 'FP': fp_novo})
+
+        # export para csv
+        df = pd.DataFrame(load_fp)
+        df.to_csv(os.path.join(feeder_path, self.file_load_pf), index=False)
+
+
     def __edit_capacitor(self):
         """ Implementa modificações no OpenDSS para a criação do cenario"""
-        self.dss.text(f"batchedit capacitor..* conn=wye")  # TODO parece que o comando não funciona
+        self.dss.text(f"batchedit capacitor..* conn=wye")  # TODO parece que o comando não funciona e deve ser alterado no dss
         self.dss.text("edit Capacitor.c1 conn=wye")
         if self.controle == 'Tensao':
             for ctrl_cap in self.dss.capcontrols.names:
@@ -92,8 +149,8 @@ class Feeder_Condition:
                 self.dss.text(f"enable capacitor.{self.dss.capacitors.name}")
 
                 self.dss.capcontrols.name = ctrl_cap  # ativa o controle do capacitor
-                self.dss.capcontrols.on_setting = (kv_cap / pt_ratio) * 0.95   # 218.5 -> 0.95 pu
-                self.dss.capcontrols.off_setting = (kv_cap / pt_ratio) * 1.02     # 230   -> 1 pu
+                self.dss.capcontrols.on_setting = (kv_cap / pt_ratio) * 0.96   # 218.5 -> 0.95 pu
+                self.dss.capcontrols.off_setting = (kv_cap / pt_ratio) * 1.01     # 230   -> 1 pu
                 #self.dss.text(f"enable CapControl.{ctrl_cap}")
                 self.dss.text(f"edit capcontrol.{ctrl_cap} enabled=true")
 
@@ -127,8 +184,8 @@ class Feeder_Condition:
             for ctrl_cap in self.dss.capcontrols.names:
                 self.dss.capcontrols.name = ctrl_cap   # ativa o controle do capacitor
                 self.dss.capcontrols.mode = 3          # Time
-                self.dss.capcontrols.on_setting = 8.0
-                self.dss.capcontrols.off_setting = 21.0
+                self.dss.capcontrols.on_setting = 7.0
+                self.dss.capcontrols.off_setting = 22.0
                 #self.dss.text(f"enable CapControl.{ctrl_cap}")
                 self.dss.text(f"edit capcontrol.{ctrl_cap} enabled=true")
 
@@ -509,6 +566,10 @@ class Feeder_Condition:
         losses = dss.circuit.losses
         losses_line = dss.circuit.line_losses
 
+        # -----------  Perdas no transformador da subestação
+        # dss.circuit.set_active_element('Transformer.REG_busA')
+        # se_trafo_losses = dss.cktelement.losses
+
         # header = self.dss.monitors.header
         dss.monitors.name = self.monitor
 
@@ -629,10 +690,13 @@ class Feeder_Condition:
         patamar_ini = self.patamar_ini
         patamar_fim = self.patamar_fim
 
+
         self.loadmult_ini = self.dss.solution.load_mult
         for number in range(patamar_ini, patamar_fim):
             hour_previous = self.dss.solution.hour
             sec_previous = self.dss.solution.seconds
+
+            self.__edit_fp_carga(number)  # Altera o FP a partir do arquivo csv
 
             self.dss.solution.solve()
 
@@ -724,8 +788,17 @@ def run_feeder_mode(utility, substation, feeder, cenarios, controles, months, ty
             return
 
         for controle in controles:
-            print(f"🚀 Processando o Master: {master_filename} | {multiprocessing.current_process().name}")
 
+            if cenario.split(",")[1] in ('Caso_tensao', 'Caso_kvar'):
+                master_filename = (
+                    f"{type_days[0]}_{months[0]}_Master_{utility}_{substation}_{feeder}_{cenario.split(",")[1]}_"
+                    f"{controle.split(",")[1]}.dss")
+                master_path = find_file(master_filename, search_path=feeder_path)
+                if master_path is None:
+                    print(f"❌ Master file não encontrado: {feeder_path} {master_filename}")
+                    return
+
+            print(f"🚀 Processando o Master: {master_filename} | {multiprocessing.current_process().name}")
             simul = Feeder_Condition(
                             utility=utility,
                             substation=substation,
