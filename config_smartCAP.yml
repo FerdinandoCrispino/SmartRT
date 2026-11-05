@@ -1,17 +1,110 @@
 # Arquivo de configurações para o script CTRL_SmartCap.py
 data_smartCAP:
   feeder_path: 'C:/SmartRT/feeders/'
-  utility: '391' #'63'
+  utility: '63' #'391'
   feeder:
-    - 'RMTQ1302'
+#    - 'RMTQ1302' #EDP-391
+#    - 'ABR07'
+#    - 'ABR08'
+#    - 'ABR09'
+#    - 'ABR10'
+#    - 'ABR11'
+#    - 'AER02'
+#    - 'AER03'
+#    - 'AER04'
+#    - 'AER05'
+#    - 'AGU07'
+#    - 'AGU08'
+#    - 'AGU09'
+#    - 'AGU10'
+#    - 'MBA13'
+#    - 'MBA14'
+#    - 'MBA15'
+#    - 'MIR14'
+#    - 'MIR15'
+#    - 'MIR16'
+#    - 'MIR21'
+#    - 'MIR22'
+#    - 'MIR23'
+#    - 'MIR24'
+    - 'TAQ03'
+#    - 'TAQ04'
+#    - 'TAQ05'
+#    - 'TAQ06'
+#    - 'TAQ08'
+#    - 'TAQ09'
+#    - 'TAQ10'
+#    - 'TAQ11'
+#    - 'TAQ12'
+#    - 'TAQ22'
+#    - 'TAQ23'
+#    - 'TAQ24'
+#    - 'TAQ25'
+#    - 'TAQ26'
   cenario:
-    - '1,Caso_Base'
+#    - '1,Caso_kvar' #391 RMTQ1302
+#    - '2,Caso_tensao' #391 RMTQ1302
+#    - '3,Casokvar1' #63 TAQ03
+#    - '4,Casokvar2' #63 TAQ03
+#    - '5,CasoSemGD' #63 AGU08
+#    - '6,CasoComGD' #63 AGU08
+#    - '7,CasoCarga' #63 AGU08
+#    - '8,CasoNovoBC' #63 AGU08
+#    - '9,CasoReparametrizacao' #63 AGU08
+#    - '10,CasoSemGDFalhaCAP272A' #63 AGU08
+#    - '11,CasoSemGDFalhaCAP272B' #63 AGU08
+#    - '12,CasoSemGDFalhaCAP272C' #63 AGU08
+#    - '13,CasoSemGDFalhaCAP618A' #63 AGU08
+#    - '14,CasoSemGDFalhaCAP618B' #63 AGU08
+#    - '15,CasoSemGDFalhaCAP618C' #63 AGU08
+#    - '16,CasoComGDFalhaCAP272A' #63 AGU08
+#    - '17,CasoComGDFalhaCAP272B' #63 AGU08
+#    - '18,CasoComGDFalhaCAP272C' #63 AGU08
+#    - '19,CasoComGDFalhaCAP618A' #63 AGU08
+#    - '20,CasoComGDFalhaCAP618B' #63 AGU08
+#    - '21,CasoComGDFalhaCAP618C' #63 AGU08
+#    - '22,CasoCargaFalhaCAP272A' #63 AGU08
+#    - '23,CasoCargaFalhaCAP272B' #63 AGU08
+#    - '24,CasoCargaFalhaCAP272C' #63 AGU08
+#    - '25,CasoCargaFalhaCAP618A' #63 AGU08
+#    - '26,CasoCargaFalhaCAP618B' #63 AGU08
+#    - '27,CasoCargaFalhaCAP618C' #63 AGU08
+#    - '28,CasoNovoBCFalhaCAP272A' #63 AGU08
+#    - '29,CasoNovoBCFalhaCAP272B' #63 AGU08
+#    - '30,CasoNovoBCFalhaCAP272C' #63 AGU08
+#    - '31,CasoNovoBCFalhaCAP618A' #63 AGU08
+#    - '32,CasoNovoBCFalhaCAP618B' #63 AGU08
+#    - '33,CasoNovoBCFalhaCAP618C' #63 AGU08
+#    - '34,CasoNovoBCFalhaCAP457A' #63 AGU08
+#    - '35,CasoNovoBCFalhaCAP457B' #63 AGU08
+#    - '36,CasoNovoBCFalhaCAP457C' #63 AGU08
+#    - '37,CasoReparametFalhaCAP272A' #63 AGU08
+#    - '38,CasoReparametFalhaCAP272B' #63 AGU08
+#    - '39,CasoReparametFalhaCAP272C' #63 AGU08
+#    - '40,CasoReparametFalhaCAP618A' #63 AGU08
+#    - '41,CasoReparametFalhaCAP618B' #63 AGU08
+#    - '42,CasoReparametFalhaCAP618C' #63 AGU08
+#    - '43,CasoReparametFalhaCAP457A' #63 AGU08
+#    - '44,CasoReparametFalhaCAP457B' #63 AGU08
+#    - '45,CasoReparametFalhaCAP457C' #63 AGU08
+#    - '46,FalhaCAP825' #63 TAQ03
+#    - '47,FalhaCAP825A' #63 TAQ03
+#    - '48,FalhaCAP825B' #63 TAQ03
+#    - '49,FalhaCAP825C' #63 TAQ03
+    - '50,CargaFalhaCAP618' #63 AGU08
+    - '51,CargaFalhaCAP618A' #63 AGU08
+    - '52,CargaFalhaCAP618B' #63 AGU08
+    - '53,CargaFalhaCAP618C' #63 AGU08
+    - '54,GDFalhaCAP618' #63 AGU08
+    - '55,GDFalhaCAP618A' #63 AGU08
+    - '56,GDFalhaCAP618B' #63 AGU08
+    - '57,GDFalhaCAP618C' #63 AGU08
   controle:
 #    - '0,Corrente'
 #    - '1,Tensao'
-#    - '2,kvar'
+    - '2,kvar'
 #    - '3,Tempo'
-#    - '4,PF'
+#    - '4,FP'
     - '5,Fixo'
     - '6,Desligado'
   month: 7 #[1, 7]
@@ -19,4 +112,5 @@ data_smartCAP:
   num_patamares: 24
   patamar_ini: 0
   patamar_fim: 24
-  multiprocess: True
+  hour: 0 #Hora da falha do BC - Apenas para os cenários de falhas
+  multiprocess: False

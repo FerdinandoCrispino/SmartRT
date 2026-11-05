@@ -33,11 +33,9 @@ def gerador_positivo_negativo():
 
 
 class Feeder_Condition:
-    def __init__(self, utility, substation, feeder, dss_file, num_patamares, patamar_ini, patamar_fim, cenario, controle):
+    def __init__(self, utility, substation, feeder, dss_file, num_patamares, patamar_ini, patamar_fim, hour, cenario, controle):
         dss = py_dss_interface.DSS()
-        #dss_tools.update_dss(dss)
         self.dss = dss
-        #self.dss_tools = dss_tools
 
         self.utility = utility
         self.substation = substation
@@ -46,12 +44,13 @@ class Feeder_Condition:
         self.total_patamar = num_patamares
         self.patamar_ini = patamar_ini
         self.patamar_fim = patamar_fim
+        self.hour = hour
         self.cenario_id = cenario.split(",")[0]
         self.cenario = cenario.split(",")[1]
         self.controle_id = controle.split(",")[0]
         self.controle = controle.split(",")[1]
 
-        self.file_load_pf = "load_fp.csv"
+        print(f"\n🚀 Processando o Alimentador:{self.feeder}; Cenário:{self.cenario}; Controle:{self.controle} | {multiprocessing.current_process().name}")
 
         # ensure DSS is ready
         self._read_dss_file()
@@ -66,7 +65,7 @@ class Feeder_Condition:
         self.__create_fp_carga()
 
         # Verifica o cenário e as modificações do DSS necessárias
-        self.__edit_capacitor()
+        # self.__edit_capacitor()
 
         # Acrescenta monitores nos capacitores
         self.__add_monitor_cap()
@@ -132,8 +131,9 @@ class Feeder_Condition:
 
     def __edit_capacitor(self):
         """ Implementa modificações no OpenDSS para a criação do cenario"""
-        self.dss.text(f"batchedit capacitor..* conn=wye")  # TODO parece que o comando não funciona e deve ser alterado no dss
-        self.dss.text("edit Capacitor.c1 conn=wye")
+        # for cap_name in self.dss.capacitors.names:
+        #     self.dss.text(f'edit Capacitor.{cap_name} conn=wye')
+
         if self.controle == 'Tensao':
             for ctrl_cap in self.dss.capcontrols.names:
                 self.dss.capcontrols.name = ctrl_cap        # ativa o controle do capacitor
@@ -151,12 +151,11 @@ class Feeder_Condition:
                 self.dss.capcontrols.name = ctrl_cap  # ativa o controle do capacitor
                 self.dss.capcontrols.on_setting = (kv_cap / pt_ratio) * 0.96   # 218.5 -> 0.95 pu
                 self.dss.capcontrols.off_setting = (kv_cap / pt_ratio) * 1.01     # 230   -> 1 pu
-                #self.dss.text(f"enable CapControl.{ctrl_cap}")
                 self.dss.text(f"edit capcontrol.{ctrl_cap} enabled=true")
 
                 print(f'{self.dss.capcontrols.name}; {self.dss.capcontrols.mode}; {self.dss.capacitors.num_steps},'
                       f'{self.dss.capacitors.states}, {self.dss.capcontrols.on_setting}, {self.dss.capcontrols.off_setting}')
-            print(f'Capacitores alterados para VoltageControl!')
+            print(f'Controle {self.controle}: Capacitor alterado para VoltageControl')
 
         elif self.controle == 'kvar':
             for ctrl_cap in self.dss.capcontrols.names:
@@ -178,7 +177,7 @@ class Feeder_Condition:
 
                 print(f'{self.dss.capcontrols.name}; modo:{self.dss.capcontrols.mode}; num_step:{self.dss.capacitors.num_steps},'
                       f'{self.dss.capacitors.states}, {self.dss.capcontrols.on_setting}, {self.dss.capcontrols.off_setting}')
-            print(f'Capacitores alterados para KVARControl!')
+            print(f'Controle {self.controle}: Capacitor alterado para KVARControl!')
 
         elif self.controle == 'Tempo':
             for ctrl_cap in self.dss.capcontrols.names:
@@ -186,7 +185,6 @@ class Feeder_Condition:
                 self.dss.capcontrols.mode = 3          # Time
                 self.dss.capcontrols.on_setting = 7.0
                 self.dss.capcontrols.off_setting = 22.0
-                #self.dss.text(f"enable CapControl.{ctrl_cap}")
                 self.dss.text(f"edit capcontrol.{ctrl_cap} enabled=true")
 
                 self.dss.capacitors.name = self.dss.capcontrols.controlled_capacitor
@@ -198,7 +196,7 @@ class Feeder_Condition:
 
                 print(f'{self.dss.capcontrols.name}; Modo:{self.dss.capcontrols.mode}; num_step:{self.dss.capacitors.num_steps},'
                       f'{self.dss.capacitors.states}, {self.dss.capcontrols.on_setting}, {self.dss.capcontrols.off_setting}')
-            print(f'Capacitores alterados para TimeControl!')
+            print(f'Controle {self.controle}: Capacitor alterado para TimeControl')
 
         elif self.controle == 'FP':
             for ctrl_cap in self.dss.capcontrols.names:
@@ -206,9 +204,7 @@ class Feeder_Condition:
                 self.dss.capcontrols.mode = 4                   # PF
                 self.dss.capcontrols.on_setting = 0.95          # (kvar, se PF < 0.97 ATRASADO)
                 self.dss.capcontrols.off_setting = 0.98         # (0, se PF < -0.97 adiantado e restringir kw<kw_mim)
-                #self.dss.text(f"enable CapControl.{ctrl_cap}")
                 self.dss.text(f"edit capcontrol.{ctrl_cap} enabled=true")
-
 
                 self.dss.capacitors.name = self.dss.capcontrols.controlled_capacitor
                 kvar = self.dss.capacitors.kvar
@@ -219,49 +215,28 @@ class Feeder_Condition:
 
                 print(f'{self.dss.capcontrols.name}; modo:{self.dss.capcontrols.mode}; num_step:{self.dss.capacitors.num_steps},'
                       f'{self.dss.capacitors.states}')
-            print(f'Capacitores alterados para PFControl!')
+            print(f'Controle {self.controle}: Capacitor alterado para PFControl!')
+
+        elif self.controle == 'Fixo':
+            for capctrl_name in self.dss.capcontrols.names:
+                self.dss.text(f'edit CapControl.{capctrl_name} enable = False')
+            print(f'Controle {self.controle}: Capacitor sempre ligado')
 
         elif self.controle == 'Desligado':
-            # remover capacitores
-
-            for ctrl_cap in self.dss.capcontrols.names:
-                self.dss.capcontrols.name = ctrl_cap  # ativa o controle do capacitor
-                self.dss.text(f"disable CapControl.{ctrl_cap}")
-
-                self.dss.capacitors.name = self.dss.capcontrols.controlled_capacitor
-                self.dss.capacitors.states = [0]
-                #self.dss.capacitors.open_all_steps()
-                self.dss.text(f"disable capacitor.{self.dss.capacitors.name}")
-
-                print(f'{self.dss.capcontrols.name}; modo:{self.dss.capcontrols.mode}; num_step:{self.dss.capacitors.num_steps},'
-                      f'{self.dss.capacitors.states}')
-            print(f'Capacitores desligado!')
-
-        # elif self.cenario == 'Caso_Base':
-        elif self.controle == 'Fixo':
-
-            self.dss.text(f"batchedit capcontrol..* enable=false")
-
-            # for ctrl_cap in self.dss.capcontrols.names:
-            #     self.dss.capcontrols.name = ctrl_cap             # ativa o controle do capacitor
-            #     self.dss.text(f"disable CapControl.{ctrl_cap}")  # desabilita o controle
-            #
-            #     self.dss.capacitors.name = self.dss.capcontrols.controlled_capacitor
-            #     self.dss.text(f"enable capacitor.{self.dss.capacitors.name}")
-            #     self.dss.capacitors.states = [1]
-            #     #self.dss.capacitors.close_all_steps()
-            #
-            #     print(f'{self.dss.capcontrols.name}; {self.dss.capcontrols.mode}; {self.dss.capacitors.num_steps},'
-            #       f'{self.dss.capacitors.states}')
-            # print(f'Controle: {self.controle} - Sem alterações na configuração dos Capacitores')
+            for cap_name in self.dss.capacitors.names:
+                self.dss.text(f"disable Capacitor.{cap_name}")
+                self.dss.text(f'edit CapControl.C1ctrl_{cap_name.split('_')[1]} enable = False')
+            print(f'Capacitor {self.controle}')
 
         else:
             print(f'Cenário ou Controle não definidos: {self.cenario} - {self.controle}')
+            sys.exit()
+
+        self.dss.text(f"calcv") # TODO - TESTE
 
     def __add_monitor_cap(self):
         for cap_name in self.dss.capacitors.names:
             self.dss.text(f"new monitor.{cap_name} element=Capacitor.{cap_name} terminal=1 mode=0 ppolar=no")
-
 
     def __add_monitor_powers(self):
         """ Navega pela topologia da rede de um bus qualquer até o início do circuito
@@ -301,9 +276,14 @@ class Feeder_Condition:
         self.dss.text("set maxiterations = 100")
 
         if self.total_patamar == 24:
-            self.dss.text(f"set stepsize = 1h")
-            horas = self.patamar_ini
-            total_sec = 0
+            if "falha" in self.cenario.lower():
+                self.dss.text(f"set stepsize = 1h")
+                horas = self.hour
+                total_sec = 0
+            else:
+                self.dss.text(f"set stepsize = 1h")
+                horas = self.patamar_ini
+                total_sec = 0
 
         else:
             self.dss.text(f"set stepsize = {86400 / self.total_patamar}s")
@@ -453,14 +433,6 @@ class Feeder_Condition:
         except:
             print('Error: insert database...')
 
-    def _read_voltage_cap(self):
-        for capacitor_name in self.dss.capacitors.names:
-            self.dss.monitors.name = capacitor_name
-            print(f'Capacitor: {capacitor_name} '
-                  f'kV: {self.dss.monitors.channel(1)[-1]/7967}  {self.dss.monitors.channel(3)[-1]/7967} {self.dss.monitors.channel(5)[-1]/7967}')
-
-
-
     def _read_cap(self, number, hour, sec):
         cap_rows = []
         cap_dados_rows = []
@@ -479,7 +451,7 @@ class Feeder_Condition:
             available_steps = self.dss.capacitors.available_steps
 
             capacitor_bus = self.dss.cktelement.bus_names
-            #Todo incluir distancia do capacitor à subestação para definir diferentes delays entre os calacitores ao longo do circcuito
+            #Todo incluir distancia do capacitor à subestação para definir diferentes delays entre os capacitores ao longo do circcuito
             self.dss.circuit.set_active_bus(capacitor_bus[0])
             kv_base = self.dss.bus.kv_base
             for node in range(self.dss.bus.num_nodes):
@@ -492,6 +464,9 @@ class Feeder_Condition:
                 if ctrl_cap == 'None':
                     continue
 
+                if self.controle == "Desligado" or self.controle == "Fixo":
+                    continue
+
                 self.dss.capcontrols.name = ctrl_cap
                 capacitor_ctrl = self.dss.capcontrols.controlled_capacitor
 
@@ -501,26 +476,26 @@ class Feeder_Condition:
                     dead_time = self.dss.capcontrols.dead_time
                     ctrl_mode = self.dss.capcontrols.mode
 
-                    if ctrl_mode == 0:
+                    if ctrl_mode == 0: # Corrente
                         ct_ratio = self.dss.capcontrols.ct_ratio
                         ctrl_on = self.dss.capcontrols.on_setting
                         ctrl_off = self.dss.capcontrols.off_setting
 
-                    elif ctrl_mode == 1:        # Tensão
+                    elif ctrl_mode == 1: # Tensão
                         pt_ratio = self.dss.capcontrols.pt_ratio
                         ctrl_on = self.dss.capcontrols.on_setting
                         ctrl_off = self.dss.capcontrols.off_setting
 
-                    elif ctrl_mode == 2:        # kvar
+                    elif ctrl_mode == 2: # kvar
                         ct_ratio = self.dss.capcontrols.ct_ratio
                         ctrl_on = self.dss.capcontrols.on_setting
                         ctrl_off = self.dss.capcontrols.off_setting
 
-                    elif ctrl_mode == 3:
+                    elif ctrl_mode == 3: # Tempo
                         ctrl_on = self.dss.capcontrols.on_setting
                         ctrl_off = self.dss.capcontrols.off_setting
 
-                    elif ctrl_mode == 4:
+                    elif ctrl_mode == 4: # PF
                         ctrl_on = self.dss.capcontrols.on_setting
                         ctrl_off = self.dss.capcontrols.off_setting
 
@@ -554,33 +529,32 @@ class Feeder_Condition:
                              "kv_base": kv_base
                              })
 
+            print(f"capacitor:{capacitor_name}; step:{current_steps}; ctrl_on:{ctrl_on}; ctrl_off:{ctrl_off}")
+
         if number == 0:
             self.__save_results_db("equipamento", cap_rows)
 
         self.__save_results_db("capacitor", cap_dados_rows)
 
     def _read_powers_losses(self, number, hour, sec):
-        dss = self.dss
         data_powers_losses = list()
 
-        losses = dss.circuit.losses
-        losses_line = dss.circuit.line_losses
-
+        losses = self.dss.circuit.losses
+        self.dss.monitors.name = self.monitor
+        print(f"Losses:{losses}W")
         # -----------  Perdas no transformador da subestação
         # dss.circuit.set_active_element('Transformer.REG_busA')
         # se_trafo_losses = dss.cktelement.losses
 
-        # header = self.dss.monitors.header
-        dss.monitors.name = self.monitor
-
         # Typical mode=65 mapping: Channel 1 (Ph1), Channel 3 (Ph2), Channel 5 (Ph3)
-        p_phase1 = np.array(dss.monitors.channel(1))[number]
-        p_phase2 = np.array(dss.monitors.channel(3))[number]
-        p_phase3 = np.array(dss.monitors.channel(5))[number]
+        p_phase1 = np.array(self.dss.monitors.channel(1))[number]
+        p_phase2 = np.array(self.dss.monitors.channel(3))[number]
+        p_phase3 = np.array(self.dss.monitors.channel(5))[number]
 
-        q_phase1 = np.array(dss.monitors.channel(2))[number]
-        q_phase2 = np.array(dss.monitors.channel(4))[number]
-        q_phase3 = np.array(dss.monitors.channel(6))[number]
+        q_phase1 = np.array(self.dss.monitors.channel(2))[number]
+        q_phase2 = np.array(self.dss.monitors.channel(4))[number]
+        q_phase3 = np.array(self.dss.monitors.channel(6))[number]
+        print(f"q1:{q_phase1}; q2:{q_phase2}; q3:{q_phase3}; kvar")
 
         data_powers_losses.append({
             "cenario_id": self.cenario_id,
@@ -683,7 +657,6 @@ class Feeder_Condition:
 
         self.__save_results_db("barra", data_bus_voltage_powers)
 
-
     def solve_circuit(self):
         ini_tentativa = 1  # valor inicial para o loadmult
         max_tentativa = 20  # número de tentativas após não convergência
@@ -736,12 +709,14 @@ class Feeder_Condition:
                         self.__check_kv_base()
                         break
 
-            print(f"{self.feeder}; {self.cenario}; {self.controle}; Patamar: {number}, Hour: {hour}, Seconds: {sec}")
+            print(f"\n{self.feeder}; {self.cenario}; {self.controle}; Patamar: {number}, Hour: {hour}, Seconds: {sec}")
+
             for cap_name in self.dss.capacitors.names:
                 self.dss.capacitors.name = cap_name
-                print(f'{self.dss.capacitors.name}:  {self.dss.capacitors.states} '
-                      f'kvar: {float(self.dss.capacitors.kvar) * (sum(self.dss.capacitors.states) / int(self.dss.capacitors.num_steps) )}  de {float(self.dss.capacitors.kvar)} ')
-
+                self.dss.circuit.set_active_element(f"capacitor.{self.dss.capacitors.name}")
+                powers = self.dss.cktelement.powers
+                kvar_bus1 = powers[1::2]
+                print(f'Capacitor:{self.dss.capacitors.name}; Control:{self.controle}; Enabled:{self.dss.cktelement.is_enabled}; States:{self.dss.capacitors.states}; kvar:{(sum(kvar_bus1) * (self.dss.cktelement.is_enabled)):.2f} de -{float(self.dss.capacitors.kvar)} ')
 
             if 1 <= hour <= 24 and sec == 0:
                 path_dss = os.path.dirname(self.dss_file)
@@ -752,6 +727,8 @@ class Feeder_Condition:
             self._read_voltage_powers(number, hour, sec)
             self._read_powers_losses(number, hour, sec)
             self._read_cap(number, hour, sec)
+
+        print(f"✅ Alimentador:{self.feeder}; Cenário:{self.cenario}; Controle:{self.controle} processado com sucesso.")
 
 
 @dataclass
@@ -765,6 +742,7 @@ class Task:
     num_patamares: int
     patamar_ini: int
     patamar_fim: int
+    hour: int
     config: Dict
 
 
@@ -774,20 +752,27 @@ def find_file(filename: str, search_path: str):
             return Path(root) / filename
     return None
 
-def run_feeder_mode(utility, substation, feeder, cenarios, controles, months, type_days, num_patamares, patamar_ini, patamar_fim, config):
-    if num_patamares == 24:
-        master_filename = f"{type_days[0]}_{months[0]}_Master_{utility}_{substation}_{feeder}.dss"
-    else:
-        master_filename = f"{type_days[0]}_{months[0]}_Master_{utility}_{substation}_{feeder}_{num_patamares}.dss"
+def run_feeder_mode(utility, substation, feeder, cenarios, controles, months, type_days, num_patamares, patamar_ini, patamar_fim, hour, config):
+    # if num_patamares == 24:
+    #     for cenario in cenarios:
+    #         if cenario == '1,Caso_Base':
+    #             master_filename = f"{type_days[0]}_{months[0]}_Master_{utility}_{substation}_{feeder}.dss"
+    #         else:
+    #             for controle in controles:
+    #                 master_filename = f"{type_days[0]}_{months[0]}_Master_{utility}_{substation}_{feeder}_{cenario.split(",")[1]}_{controle.split(",")[1]}.dss"
+    # else:
+    #     master_filename = f"{type_days[0]}_{months[0]}_Master_{utility}_{substation}_{feeder}_{num_patamares}.dss"
 
     for cenario in cenarios:
-        feeder_path = Path(config["feeder_path"]).resolve()
-        master_path = find_file(master_filename, search_path=feeder_path)
-        if master_path is None:
-            print(f"❌ Master file não encontrado: {feeder_path} {master_filename}")
-            return
-
         for controle in controles:
+
+            master_filename = f"{type_days[0]}_{months[0]}_Master_{utility}_{substation}_{feeder}_{cenario.split(",")[1]}_{controle.split(",")[1]}.dss"
+
+            feeder_path = Path(config["feeder_path"]).resolve()
+            master_path = find_file(master_filename, search_path=feeder_path)
+            if master_path is None:
+                print(f"❌ Master file não encontrado: {feeder_path} {master_filename}")
+                return
 
             if cenario.split(",")[1] in ('Caso_tensao', 'Caso_kvar'):
                 master_filename = (
@@ -807,13 +792,12 @@ def run_feeder_mode(utility, substation, feeder, cenarios, controles, months, ty
                             num_patamares=num_patamares,
                             patamar_ini=patamar_ini,
                             patamar_fim=patamar_fim,
+                            hour=hour,
                             cenario=cenario,
                             controle=controle
                             )
 
             simul.solve_circuit()
-
-            print(f"✅ Alimentador {master_filename} processado com sucesso.")
 
 def process_task(task: Task):
     utility = task.utility
@@ -825,6 +809,7 @@ def process_task(task: Task):
     num_patamares = task.num_patamares
     patamar_ini = task.patamar_ini
     patamar_fim = task.patamar_fim
+    hour = task.hour
     config = task.config
 
     if isinstance(feeders, str):
@@ -841,7 +826,7 @@ def process_task(task: Task):
     for feeder in feeders:
         run_feeder_mode(
             utility=utility,
-            substation=config['feeder_path'].split(os.sep)[-1],  #feeder[1:4],
+            substation=feeder[0:3], #config['feeder_path'].split(os.sep)[-1],
             feeder=feeder,
             cenarios=cenarios,
             controles=controles,
@@ -850,6 +835,7 @@ def process_task(task: Task):
             num_patamares=num_patamares,
             patamar_ini=patamar_ini,
             patamar_fim=patamar_fim,
+            hour=hour,
             config=config
         )
 
@@ -870,6 +856,7 @@ def build_tasks_from_config(config: Dict) -> List[Task]:
     num_patamares = config["num_patamares"]
     patamar_ini = config["patamar_ini"]
     patamar_fim = config["patamar_fim"]
+    hour = config["hour"]
 
     tasks: List[Task] = []
 
@@ -888,6 +875,7 @@ def build_tasks_from_config(config: Dict) -> List[Task]:
                             num_patamares=int(num_patamares),
                             patamar_ini=int(patamar_ini),
                             patamar_fim=int(patamar_fim),
+                            hour=int(hour),
                             config=config)
                         )
 
